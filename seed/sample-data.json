@@ -1,0 +1,73 @@
+{
+  "employees": [
+    {
+      "id": "REPLACE_WITH_AUTH_UID",
+      "email": "finance@noorcast.com",
+      "fullName": "سارة العتيبي",
+      "department": "finance",
+      "role": "employee"
+    },
+    {
+      "id": "REPLACE_WITH_AUTH_UID",
+      "email": "ops@noorcast.com",
+      "fullName": "محمد الشمري",
+      "department": "operations",
+      "role": "employee"
+    },
+    {
+      "id": "REPLACE_WITH_AUTH_UID",
+      "email": "hr@noorcast.com",
+      "fullName": "نورة القحطاني",
+      "department": "hr",
+      "role": "manager"
+    }
+  ],
+  "finance": [
+    {
+      "employeeEmail": "finance@noorcast.com",
+      "type": "salary",
+      "amount": 12000,
+      "description": "راتب شهر يونيو",
+      "date": "2025-06-01"
+    },
+    {
+      "employeeEmail": "finance@noorcast.com",
+      "type": "bonus",
+      "amount": 2000,
+      "description": "مكافأة أداء",
+      "date": "2025-06-15"
+    }
+  ],
+  "operations": [
+    {
+      "employeeEmail": "ops@noorcast.com",
+      "title": "مراجعة تقرير التشغيل",
+      "description": "مراجعة تقرير الأسبوع وإرساله للإدارة",
+      "status": "in_progress",
+      "dueDate": "2025-06-25"
+    },
+    {
+      "employeeEmail": "ops@noorcast.com",
+      "title": "تحديث جدول الصيانة",
+      "description": "تحديث جدول صيانة المعدات",
+      "status": "pending",
+      "dueDate": "2025-06-30"
+    }
+  ],
+  "hr": [
+    {
+      "employeeEmail": "hr@noorcast.com",
+      "leaveType": "annual",
+      "leaveBalance": 21,
+      "contractType": "دوام كامل",
+      "startDate": "2023-01-15"
+    },
+    {
+      "employeeEmail": "finance@noorcast.com",
+      "leaveType": "annual",
+      "leaveBalance": 18,
+      "contractType": "دوام كامل",
+      "startDate": "2022-03-01"
+    }
+  ]
+}
