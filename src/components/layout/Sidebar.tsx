@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';
-// تم تعديل المسار هنا ليصبح ../../ للوصول لـ src
-import { auth, db } from '../../firebase'; 
+import { auth, db } from '../../config'; // تم تحديث المسار ليطابق ملف config.ts
 
 const sectionTitleStyle = { fontSize: '0.75rem', color: '#64748b', margin: '20px 10px 10px 10px', textTransform: 'uppercase' as const, cursor: 'pointer', display: 'flex', justifyContent: 'space-between' };
 const sectionStyle = { marginBottom: '20px' };
@@ -16,8 +15,12 @@ export default function Sidebar() {
   useEffect(() => {
     const fetchUserRole = async () => {
       if (auth.currentUser) {
-        const userDoc = await getDoc(doc(db, "employees", auth.currentUser.uid));
-        if (userDoc.exists()) setRole(userDoc.data().role);
+        try {
+          const userDoc = await getDoc(doc(db, "employees", auth.currentUser.uid));
+          if (userDoc.exists()) setRole(userDoc.data().role);
+        } catch (error) {
+          console.error("خطأ في جلب بيانات الموظف:", error);
+        }
       }
     };
     fetchUserRole();
@@ -25,6 +28,7 @@ export default function Sidebar() {
 
   return (
     <>
+      {/* زر القائمة للموبايل */}
       <button 
         onClick={() => setIsOpen(!isOpen)}
         style={{ position: 'fixed', top: '10px', left: '10px', zIndex: 1000, background: '#1e293b', color: 'white', border: 'none', padding: '10px', borderRadius: '5px' }}
@@ -32,6 +36,7 @@ export default function Sidebar() {
         {isOpen ? '✕' : '≡ القائمة'}
       </button>
 
+      {/* الـ Sidebar */}
       <aside style={{ 
         width: isOpen ? '240px' : '0px', 
         background: '#0f172a', 
@@ -49,6 +54,7 @@ export default function Sidebar() {
           <nav style={{ marginTop: '50px' }}>
             <div style={sectionStyle}><NavItem to="/" label="لوحة التحكم" /></div>
 
+            {/* قسم المالية - يظهر للمدير فقط */}
             {(role === 'admin') && (
               <div style={sectionStyle}>
                 <p style={sectionTitleStyle} onClick={() => setIsFinanceOpen(!isFinanceOpen)}>
@@ -65,6 +71,7 @@ export default function Sidebar() {
               </div>
             )}
 
+            {/* قسم التشغيل */}
             <div style={sectionStyle}>
               <p style={sectionTitleStyle} onClick={() => setIsOpsOpen(!isOpsOpen)}>
                 التشغيل {isOpsOpen ? '▼' : '▲'}
