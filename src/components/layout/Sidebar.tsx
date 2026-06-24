@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';
-import { auth, db } from '../../firebase/config';
+import { auth, db } from '../../firebase/config'; 
+
 const sectionTitleStyle = { fontSize: '0.75rem', color: '#64748b', margin: '20px 10px 10px 10px', textTransform: 'uppercase' as const, cursor: 'pointer', display: 'flex', justifyContent: 'space-between' };
 const sectionStyle = { marginBottom: '20px' };
 
@@ -30,7 +31,17 @@ export default function Sidebar() {
       {/* زر القائمة للموبايل */}
       <button 
         onClick={() => setIsOpen(!isOpen)}
-        style={{ position: 'fixed', top: '10px', left: '10px', zIndex: 1000, background: '#1e293b', color: 'white', border: 'none', padding: '10px', borderRadius: '5px' }}
+        style={{ 
+          position: 'fixed', 
+          top: '10px', 
+          right: '10px', // زر القائمة في اليمين
+          zIndex: 1000, 
+          background: '#1e293b', 
+          color: 'white', 
+          border: 'none', 
+          padding: '10px', 
+          borderRadius: '5px' 
+        }}
       >
         {isOpen ? '✕' : '≡ القائمة'}
       </button>
@@ -41,9 +52,9 @@ export default function Sidebar() {
         background: '#0f172a', 
         height: '100vh', 
         padding: isOpen ? '20px' : '0px',
-        borderLeft: '1px solid #334155',
+        borderLeft: '1px solid #334155', // الخط الفاصل على اليسار (لأن القائمة يمين)
         position: 'fixed',
-        left: 0,
+        right: 0, // القائمة مثبتة في اليمين
         top: 0,
         transition: '0.3s',
         zIndex: 999,
@@ -53,7 +64,6 @@ export default function Sidebar() {
           <nav style={{ marginTop: '50px' }}>
             <div style={sectionStyle}><NavItem to="/" label="لوحة التحكم" /></div>
 
-            {/* قسم المالية - يظهر للمدير فقط */}
             {(role === 'admin') && (
               <div style={sectionStyle}>
                 <p style={sectionTitleStyle} onClick={() => setIsFinanceOpen(!isFinanceOpen)}>
@@ -70,7 +80,6 @@ export default function Sidebar() {
               </div>
             )}
 
-            {/* قسم التشغيل */}
             <div style={sectionStyle}>
               <p style={sectionTitleStyle} onClick={() => setIsOpsOpen(!isOpsOpen)}>
                 التشغيل {isOpsOpen ? '▼' : '▲'}
