@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';
-import { auth, db } from '../firebase';
+// تم تعديل المسار هنا ليصبح ../../ للوصول لـ src
+import { auth, db } from '../../firebase'; 
 
 const sectionTitleStyle = { fontSize: '0.75rem', color: '#64748b', margin: '20px 10px 10px 10px', textTransform: 'uppercase' as const, cursor: 'pointer', display: 'flex', justifyContent: 'space-between' };
 const sectionStyle = { marginBottom: '20px' };
@@ -10,7 +11,7 @@ export default function Sidebar() {
   const [role, setRole] = useState<string | null>(null);
   const [isFinanceOpen, setIsFinanceOpen] = useState(true);
   const [isOpsOpen, setIsOpsOpen] = useState(true);
-  const [isOpen, setIsOpen] = useState(window.innerWidth > 768); // يفتح تلقائياً في الشاشات الكبيرة
+  const [isOpen, setIsOpen] = useState(window.innerWidth > 768);
 
   useEffect(() => {
     const fetchUserRole = async () => {
@@ -24,7 +25,6 @@ export default function Sidebar() {
 
   return (
     <>
-      {/* زر القائمة للموبايل */}
       <button 
         onClick={() => setIsOpen(!isOpen)}
         style={{ position: 'fixed', top: '10px', left: '10px', zIndex: 1000, background: '#1e293b', color: 'white', border: 'none', padding: '10px', borderRadius: '5px' }}
@@ -32,7 +32,6 @@ export default function Sidebar() {
         {isOpen ? '✕' : '≡ القائمة'}
       </button>
 
-      {/* الـ Sidebar */}
       <aside style={{ 
         width: isOpen ? '240px' : '0px', 
         background: '#0f172a', 
