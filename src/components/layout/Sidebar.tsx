@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';
-import { auth, db } from '../../config'; // تم تحديث المسار ليطابق ملف config.ts
-
+import { auth, db } from '../../firebase/config';
 const sectionTitleStyle = { fontSize: '0.75rem', color: '#64748b', margin: '20px 10px 10px 10px', textTransform: 'uppercase' as const, cursor: 'pointer', display: 'flex', justifyContent: 'space-between' };
 const sectionStyle = { marginBottom: '20px' };
 
