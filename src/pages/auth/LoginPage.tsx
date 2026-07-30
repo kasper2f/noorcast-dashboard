@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { loginWithEmail } from '@/firebase/auth';
+import { useAuthContext } from '@/context/AuthContext';
+import { getHRPayrollSheet } from '@/services/dbService';
 import { ar } from '@/i18n/ar';
 
 export function LoginPage() {
@@ -9,18 +10,67 @@ export function LoginPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const { verifyAdminCredentials } = useAuthContext();
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
+    console.log("1. تم الضغط على زر تسجيل الدخول");
     setError('');
     setLoading(true);
 
     try {
-      await loginWithEmail(email, password);
-      navigate('/');
-    } catch {
-      setError(ar.auth.loginError);
+      console.log("2. جاري التحقق من بيانات المشرف من Google Sheets...");
+      const isValidAdmin = await verifyAdminCredentials(email, password);
+      console.log("3. نتيجة التحقق من الشيت:", isValidAdmin);
+
+      if (isValidAdmin) {
+        console.log("4. البيانات صحيحة، جاري جلب ملف الموظف وربط الجلسة...");
+        
+        let employeeUsername = email.split('@')[0];
+        let employeeName = 'مستخدم نظام';
+        let employeeRole = 'مشرف';
+
+        try {
+          // جلب بيانات مسير الرواتب لمطابقة الـ Username والاسم الحقيقي للإيميل المُسجل
+          const hrEmployees = await getHRPayrollSheet();
+          if (Array.isArray(hrEmployees)) {
+            const matchedEmp = hrEmployees.find(
+              (emp: any) => String(emp.email || '').toLowerCase().trim() === email.toLowerCase().trim()
+            );
+            if (matchedEmp) {
+              employeeUsername = matchedEmp.username || matchedEmp.name?.split(' ')[0] || employeeUsername;
+              employeeName = matchedEmp.name || employeeName;
+              employeeRole = matchedEmp.position || matchedEmp.role || employeeRole;
+            }
+          }
+        } catch (fetchErr) {
+          console.error("لم يتم جلب بيانات الـ HR بنجاح، سيتم الاعتماد على اسم المستخدم الافتراضي:", fetchErr);
+        }
+
+        // حفظ تفاصيل الجلسة كاملة في التخزين المحلي لضمان ربط الـ AuditLog والـ CRM بدقة متناهية
+        const sessionData = {
+          email: email.toLowerCase().trim(),
+          username: employeeUsername,
+          name: employeeName,
+          role: employeeRole,
+          loginTime: new Date().toISOString()
+        };
+
+        localStorage.setItem('currentUser', JSON.stringify(sessionData));
+        localStorage.setItem('adminUser', JSON.stringify(sessionData));
+        localStorage.setItem('userEmail', email.toLowerCase().trim());
+
+        console.log("5. تم حفظ الجلسة بنجاح للموظف:", employeeUsername);
+        navigate('/');
+      } else {
+        console.log("6. البيانات غير مطابقة في الشيت");
+        setError(ar.auth.loginError || 'بيانات الدخول غير صحيحة');
+      }
+    } catch (err) {
+      console.log("7. حدث استثناء (Catch Error):", err);
+      setError(ar.auth.loginError || 'حدث خطأ أثناء تسجيل الدخول');
     } finally {
+      console.log("8. انتهت عملية الـ Submit وتم إعادة تعيين حالة التحميل");
       setLoading(false);
     }
   }

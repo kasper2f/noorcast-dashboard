@@ -12,6 +12,9 @@ export function AppLayout() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  // التقاط يوزر أو إيميل المستخدم الحالي من التخزين المحلي لضمان ظهوره بدقة
+  const currentIdentifier = localStorage.getItem('userEmail') || localStorage.getItem('username') || 'abdullatif';
+
   return (
     <div style={{ 
       display: 'flex', 
@@ -20,7 +23,7 @@ export function AppLayout() {
       overflow: 'hidden',
       backgroundColor: '#0f172a' 
     }}>
-      {/* القائمة الجانبية: مخفية أو فوق المحتوى في الجوال */}
+      {/* القائمة الجانبية */}
       <div style={{ 
         width: isMobile ? '0px' : '250px', 
         flexShrink: 0,
@@ -40,15 +43,14 @@ export function AppLayout() {
         overflowY: 'auto',
         width: '100%'
       }}>
-        <Header />
+        {/* تمرير المعرف للهيدر */}
+        <Header userIdentifier={currentIdentifier} />
         
-        {/* المحتوى المتغير: تحسين الـ padding للجوال */}
         <main style={{ 
           padding: isMobile ? '15px' : '24px', 
           color: 'white',
           flex: 1
         }}>
-          {/* حاوية لتجنب خروج الجداول عن الشاشة في الجوال */}
           <div style={{ overflowX: 'auto', width: '100%' }}>
             <Outlet />
           </div>

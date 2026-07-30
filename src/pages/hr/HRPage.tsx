@@ -1,128 +1,211 @@
-import { useState } from 'react';
-
-const initialEmployees = [{
-  id: 1, name: 'عهود احمد عبدالله', role: 'مديرة تسويق', email: 'tollystore.sa@gmail.com',
-  phone: '0501234567', status: 'نشط ومتواجد بالخدمة', initial: 'ع', color: '#f59e0b',
-  kpi: { financialTarget: 100000, financialAchieved: 85000, callsTarget: 200, callsDone: 180, dealsClosed: 35, rating: 4.7 }
-}];
+import { useState, useEffect } from 'react';
+import { getOrders, getHRPayrollSheet, getHRActionLogs, nominateEmployeeForExcellence } from '@/services/dbService';
+import { FiSearch, FiRefreshCw, FiStar } from 'react-icons/fi';
 
 export default function HRPage() {
-  const [employees, setEmployees] = useState(initialEmployees);
-  const [editingEmp, setEditingEmp] = useState<any>(null);
+  const [employees, setEmployees] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('الكل');
+  const [searchTerm, setSearchTerm] = useState('');
 
-  const saveChanges = () => {
-    if (editingEmp.id) {
-      setEmployees(employees.map(e => e.id === editingEmp.id ? editingEmp : e));
-    } else {
-      setEmployees([...employees, { ...editingEmp, id: Date.now(), initial: editingEmp.name[0] || '?', color: '#3b82f6' }]);
+  useEffect(() => {
+    loadLiveHRData();
+  }, []);
+
+  const loadLiveHRData = async () => {
+    try {
+      setLoading(true);
+
+      const [sheetData, orders] = await Promise.all([
+        getHRPayrollSheet(),
+        getOrders().catch(() => [])
+      ]);
+
+      let payrollEmployees = Array.isArray(sheetData) && sheetData.length > 0 ? sheetData : [];
+      if (payrollEmployees.length === 0) {
+        setEmployees([]);
+        setLoading(false);
+        return;
+      }
+
+      const validOrders = Array.isArray(orders) ? orders : [];
+
+      const analyzedEmployees = payrollEmployees.map((emp: any, index: number) => {
+        const empEmail = String(emp.email || emp.employeeEmail || '').toLowerCase().trim();
+        const empUsername = String(emp.username || emp.name?.split(' ')[0] || '').toLowerCase().trim();
+
+        // 1. تصفية طلبات الـ CRM الخاصة حصراً بهذا الموظف بالمطابقة الصارمة
+        const empOrders = validOrders.filter((o: any) => {
+          if (!o) return false;
+          const assigned = String(o.lastContactedBy || o.assignedEmployee || '').toLowerCase().trim();
+          const orderEmail = String(o.email || o.clientEmail || '').toLowerCase().trim();
+
+          const matchEmail = empEmail && orderEmail === empEmail;
+          const matchUsername = empUsername && (assigned === empUsername || assigned === `@${empUsername}`);
+
+          return matchEmail || matchUsername;
+        });
+
+        // 2. الحالة تُؤخذ مباشرة وحصراً من عمود الـ status المحدث في شيت HR_Payroll (المصدر الموثوق)
+        let currentStatus = emp.status && emp.status.trim() !== '' ? emp.status : 'نشط ومتواجد بالخدمة';
+
+        // صفقات الموظف المنجزة والمالية
+        const closedOrders = empOrders.filter((o: any) => {
+          const status = String(o.status || '').trim();
+          return ['تم التنفيذ', 'تم التعاقد', 'مكتمل', 'منجز'].includes(status);
+        });
+
+        const dealsClosed = closedOrders.length;
+
+        const financialAchieved = closedOrders.reduce((sum: number, o: any) => {
+          const val = o.price || o.amount || o.value || 0;
+          const clean = parseFloat(String(val).replace(/[^0-9.]/g, '')) || 0;
+          return sum + clean;
+        }, 0);
+
+        // نسبة النشاط التشغيلي بناءً على عدد طلباته الفعلية
+        const activityPercentage = empOrders.length > 0 ? Math.min(Math.round((empOrders.length / 10) * 100), 100) : 0;
+
+        return {
+          id: String(emp.employeeId || emp.id || index),
+          name: emp.name || 'موظف',
+          username: emp.username || emp.name?.split(' ')[0] || 'user', 
+          email: emp.email || emp.employeeEmail || '',
+          role: emp.position || emp.role || 'موظف عام',
+          phone: emp.phone || '0500000000',
+          status: currentStatus, 
+          initial: emp.name ? emp.name[0] : 'م',
+          color: '#3b82f6',
+          kpi: {
+            financialTarget: Number(emp.financialTarget) || 100000,
+            financialAchieved: financialAchieved, 
+            activityPercentage: activityPercentage, 
+            dealsClosed: dealsClosed, 
+            rating: dealsClosed > 0 ? 5.0 : 4.0
+          }
+        };
+      });
+
+      setEmployees(analyzedEmployees);
+    } catch (error) {
+      console.error("خطأ في جلب بيانات HR:", error);
+    } finally {
+      setLoading(false);
     }
-    setEditingEmp(null);
   };
 
-  const filteredEmployees = filter === 'الكل' 
-    ? employees 
-    : employees.filter(e => e.status === filter);
+  const handleNominateExcellence = async (emp: any) => {
+    if (!confirm(`هل أنت متأكد من ترشيح الموظف (${emp.name}) لجائزة التميز؟`)) return;
+
+    try {
+      await nominateEmployeeForExcellence({
+        employeeId: emp.id,
+        name: emp.name,
+        username: emp.username
+      });
+      alert(`تم بنجاح ترشيح الموظف: ${emp.name} لجائزة التميز سحابياً! 🌟🏆`);
+    } catch (error) {
+      console.error("خطأ في الترشيح:", error);
+      alert("حدث خطأ أثناء إرسال الترشيح.");
+    }
+  };
+
+  const filteredEmployees = employees.filter(e => {
+    const matchesFilter = filter === 'الكل' || e.status.includes(filter);
+    const matchesSearch = e.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          e.role.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          e.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          e.username.toLowerCase().includes(searchTerm.toLowerCase());
+    return matchesFilter && matchesSearch;
+  });
 
   return (
-    <div style={{ padding: '24px', background: '#0f172a', minHeight: '100vh', color: 'white' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h1>لوحة إدارة شؤون الموظفين والكفاءات</h1>
-        <button onClick={() => setEditingEmp({ name: '', role: '', email: '', phone: '', status: 'نشط ومتواجد بالخدمة', kpi: { financialTarget: 0, financialAchieved: 0, callsTarget: 0, callsDone: 0, dealsClosed: 0, rating: 0 } })} 
-                style={{ background: '#10b981', color: 'white', padding: '10px 20px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>+ إضافة موظف</button>
+    <div style={{ padding: '32px', background: '#0f172a', minHeight: '100vh', color: 'white', fontFamily: 'Cairo, sans-serif', boxSizing: 'border-box' }}>
+      
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px' }}>
+        <div>
+          <h1 style={{ margin: 0, fontSize: '1.85rem', fontWeight: 'bold' }}>لوحة إدارة شؤون الموظفين والكفاءات</h1>
+          <p style={{ color: '#94a3b8', fontSize: '0.95rem', margin: '6px 0 0 0' }}>مؤشرات أداء مرتبطة حصراً بطلبات الـ CRM وحالة الحوكمة الإدارية</p>
+        </div>
+        <button onClick={loadLiveHRData} style={primaryBtn}>
+          <FiRefreshCw style={{ marginLeft: '5px' }} /> تحديث ومزامنة 🔄
+        </button>
       </div>
 
-      <div style={{ marginTop: '20px', display: 'flex', gap: '10px' }}>
-        {['الكل', 'نشط ومتواجد بالخدمة', 'في إجازة رسمية', 'غير نشط / معلّق'].map((item) => (
-            <button key={item} onClick={() => setFilter(item)} style={{...filterBtn, background: filter === item ? '#3b82f6' : '#1e293b'}}>
-                {item} ({employees.filter(e => item === 'الكل' || e.status === item).length})
-            </button>
-        ))}
+      <div style={{ display: 'flex', gap: '15px', marginTop: '25px', flexWrap: 'wrap', alignItems: 'center', background: '#1e293b', padding: '15px', borderRadius: '12px', border: '1px solid #334155' }}>
+        <div style={{ position: 'relative', flex: 1, minWidth: '280px' }}>
+          <FiSearch style={{ position: 'absolute', right: '14px', top: '13px', color: '#94a3b8' }} />
+          <input 
+            type="text" 
+            placeholder="بحث بالاسم، الـ Username، أو الإيميل..." 
+            value={searchTerm} 
+            onChange={(e) => setSearchTerm(e.target.value)}
+            style={{ width: '100%', padding: '10px 38px 10px 15px', borderRadius: '10px', border: '1px solid #334155', background: '#0f172a', color: 'white', boxSizing: 'border-box', outline: 'none', fontSize: '0.9rem' }}
+          />
+        </div>
       </div>
       
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: '20px', marginTop: '20px' }}>
-        {filteredEmployees.map((emp) => (
-          <div key={emp.id} style={cardStyle}>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginBottom: '10px' }}>
-              <button onClick={() => setEditingEmp({...emp, kpi: {...emp.kpi}})} style={actionIconBtn}>✏️</button>
-              <button onClick={() => setEmployees(employees.filter(e => e.id !== emp.id))} style={actionIconBtn}>🗑️</button>
-            </div>
-            <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
-              <div style={{...circleStyle, background: emp.color}}>{emp.initial}</div>
-              <div>
-                <h3 style={{ margin: 0, fontSize: '1rem', color: '#1e293b' }}>{emp.name}</h3>
-                <p style={{ margin: 0, fontSize: '0.8rem', color: '#64748b' }}>{emp.role}</p>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '20px', marginTop: '25px' }}>
+        {loading ? (
+          <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '50px', color: '#94a3b8' }}>جاري التحميل...</div>
+        ) : filteredEmployees.length > 0 ? (
+          filteredEmployees.map((emp) => (
+            <div key={emp.id} style={cardStyle}>
+              
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                <span style={{ fontSize: '0.75rem', background: emp.status.includes('إجازة') ? 'rgba(245, 158, 11, 0.15)' : emp.status.includes('منتهي') ? 'rgba(239, 68, 68, 0.15)' : 'rgba(6, 95, 70, 0.2)', color: emp.status.includes('إجازة') ? '#fbbf24' : emp.status.includes('منتهي') ? '#f87171' : '#4ade80', padding: '4px 10px', borderRadius: '6px', fontWeight: 'bold' }}>
+                  {emp.status}
+                </span>
+                <span style={{ fontSize: '0.75rem', color: '#38bdf8', fontWeight: 'bold', background: 'rgba(56, 189, 248, 0.15)', padding: '4px 10px', borderRadius: '6px' }}>اسم المستخدم: @{emp.username}</span>
               </div>
-            </div>
-            <div style={{ fontSize: '0.75rem', color: '#475569', marginTop: '15px' }}>
-              <p>📧 {emp.email}</p>
-              <p>📱 {emp.phone}</p>
-            </div>
-            <div style={{ marginTop: '15px' }}>
-              <p style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#1e293b', marginBottom: '10px' }}>⭐ {emp.kpi.rating} قياسات الأداء (KPIs)</p>
-              <p style={{fontSize: '0.7rem', color: '#64748b', margin: '0 0 5px 0'}}>المكالمات: {emp.kpi.callsDone} / {emp.kpi.callsTarget}</p>
-              <div style={progressBg}><div style={{...progressBar, width: `${(emp.kpi.callsDone / (emp.kpi.callsTarget || 1)) * 100}%`}} /></div>
-              <p style={{fontSize: '0.7rem', color: '#64748b', margin: '10px 0 5px 0'}}>الإيرادات: {emp.kpi.financialAchieved} / {emp.kpi.financialTarget} ر.س</p>
-              <div style={{...progressBg, background: '#d1fae5'}}><div style={{...progressBar, width: `${(emp.kpi.financialAchieved / (emp.kpi.financialTarget || 1)) * 100}%`, background: '#10b981'}} /></div>
-            </div>
-            <div style={{ marginTop: '15px', background: '#f1f5f9', padding: '8px', textAlign: 'center', borderRadius: '8px', fontSize: '0.8rem', color: '#1e293b' }}>
-              {emp.kpi.dealsClosed} صفقات مبرمة بنجاح
-            </div>
-          </div>
-        ))}
-      </div>
 
-      {editingEmp && (
-        <div style={modalOverlay}>
-          <div style={modalStyle}>
-            <h2 style={{ color: '#1e293b', fontSize: '1.2rem', marginBottom: '20px' }}>{editingEmp.id ? '👤 تعديل بيانات الموظف' : '➕ إضافة موظف جديد'}</h2>
-            <div style={rowStyle}>
-              <div style={fieldGroup}><label style={labelStyle}>الاسم الوظيفي الكامل *</label><input style={inputStyle} value={editingEmp.name} onChange={e => setEditingEmp({...editingEmp, name: e.target.value})} /></div>
-              <div style={fieldGroup}><label style={labelStyle}>الدور / المسمى الوظيفي *</label><input style={inputStyle} value={editingEmp.role} onChange={e => setEditingEmp({...editingEmp, role: e.target.value})} /></div>
-            </div>
-            <div style={rowStyle}>
-              <div style={fieldGroup}><label style={labelStyle}>رقم هاتف التواصل</label><input style={inputStyle} value={editingEmp.phone} onChange={e => setEditingEmp({...editingEmp, phone: e.target.value})} /></div>
-              <div style={fieldGroup}><label style={labelStyle}>البريد الإلكتروني للعمل *</label><input style={inputStyle} value={editingEmp.email} onChange={e => setEditingEmp({...editingEmp, email: e.target.value})} /></div>
-            </div>
-            <label style={labelStyle}>حالة الموظف الحالية</label>
-            <select style={{...inputStyle, width: '100%', marginBottom: '15px'}} value={editingEmp.status} onChange={e => setEditingEmp({...editingEmp, status: e.target.value})}>
-              <option>نشط ومتواجد بالخدمة</option><option>في إجازة رسمية</option><option>غير نشط / معلّق</option>
-            </select>
-            <div style={kpiBox}>
-              <p style={{ color: '#3b82f6', fontSize: '0.8rem', marginBottom: '15px' }}>⭐ تعيين مؤشرات الأداء (KPI CONFIGURATION)</p>
-              <div style={gridStyle}>
-                <div><label style={labelStyle}>المستهدف المالي</label><input style={inputStyle} type="number" placeholder="مثال: 100000" value={editingEmp.kpi.financialTarget} onChange={e => setEditingEmp({...editingEmp, kpi: {...editingEmp.kpi, financialTarget: Number(e.target.value)}})} /></div>
-                <div><label style={labelStyle}>المبيعات المحققة</label><input style={inputStyle} type="number" placeholder="مثال: 85000" value={editingEmp.kpi.financialAchieved} onChange={e => setEditingEmp({...editingEmp, kpi: {...editingEmp.kpi, financialAchieved: Number(e.target.value)}})} /></div>
-                <div><label style={labelStyle}>عدد المكالمات المستهدف</label><input style={inputStyle} type="number" placeholder="مثال: 200" value={editingEmp.kpi.callsTarget} onChange={e => setEditingEmp({...editingEmp, kpi: {...editingEmp.kpi, callsTarget: Number(e.target.value)}})} /></div>
-                <div><label style={labelStyle}>الاتصالات المنجزة</label><input style={inputStyle} type="number" placeholder="مثال: 180" value={editingEmp.kpi.callsDone} onChange={e => setEditingEmp({...editingEmp, kpi: {...editingEmp.kpi, callsDone: Number(e.target.value)}})} /></div>
-                <div><label style={labelStyle}>الصفقات المبرمة</label><input style={inputStyle} type="number" placeholder="مثال: 35" value={editingEmp.kpi.dealsClosed} onChange={e => setEditingEmp({...editingEmp, kpi: {...editingEmp.kpi, dealsClosed: Number(e.target.value)}})} /></div>
-                <div><label style={labelStyle}>تقييم العملاء (0-5)</label><input style={inputStyle} type="number" step="0.1" placeholder="مثال: 4.7" value={editingEmp.kpi.rating} onChange={e => setEditingEmp({...editingEmp, kpi: {...editingEmp.kpi, rating: Number(e.target.value)}})} /></div>
+              <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                <div style={{...circleStyle, background: emp.color}}>{emp.initial}</div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1.1rem', color: 'white', fontWeight: 'bold' }}>{emp.name}</h3>
+                  <p style={{ margin: '3px 0 0 0', fontSize: '0.85rem', color: '#94a3b8' }}>{emp.role} • <strong style={{ color: '#38bdf8' }}>@{emp.username}</strong></p>
+                </div>
+              </div>
+
+              <div style={{ fontSize: '0.8rem', color: '#cbd5e1', marginTop: '15px', background: '#0f172a', padding: '12px', borderRadius: '10px', border: '1px solid #334155' }}>
+                <p style={{ margin: '3px 0' }}>📧 {emp.email}</p>
+                <p style={{ margin: '3px 0' }}>👤 Username في النظام: <strong style={{ color: '#38bdf8' }}>{emp.username}</strong></p>
+              </div>
+
+              <div style={{ marginTop: '15px' }}>
+                <p style={{ fontSize: '0.85rem', fontWeight: 'bold', color: 'white', marginBottom: '10px' }}>⭐ مؤشرات الأداء الحية</p>
+                
+                <p style={{fontSize: '0.8rem', color: '#94a3b8', margin: '0 0 4px 0'}}>نسبة النشاط التشغيلي: <strong style={{ color: '#38bdf8' }}>{emp.kpi.activityPercentage}%</strong></p>
+                <div style={progressBg}><div style={{...progressBar, width: `${emp.kpi.activityPercentage}%`}} /></div>
+                
+                <p style={{fontSize: '0.8rem', color: '#94a3b8', margin: '12px 0 4px 0'}}>المستهدف المالي المحقق: <strong style={{ color: '#4ade80' }}>{emp.kpi.financialAchieved.toLocaleString()} / {emp.kpi.financialTarget.toLocaleString()} ر.س</strong></p>
+                <div style={{...progressBg, background: '#0f172a'}}><div style={{...progressBar, width: `${Math.min((emp.kpi.financialAchieved / (emp.kpi.financialTarget || 1)) * 100, 100)}%`, background: '#10b981'}} /></div>
+              </div>
+
+              <div style={{ marginTop: '15px', background: 'rgba(59, 130, 246, 0.1)', padding: '12px', textAlign: 'center', borderRadius: '10px', fontSize: '0.85rem', color: '#60a5fa', fontWeight: 'bold', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
+                🚀 {emp.kpi.dealsClosed} صفقات ومهام منجزة | 💰 {emp.kpi.financialAchieved.toLocaleString()} ر.س محققة
+              </div>
+
+              <div style={{ display: 'flex', gap: '8px', marginTop: '15px', borderTop: '1px solid #334155', paddingTop: '12px' }}>
+                <button 
+                  onClick={() => handleNominateExcellence(emp)} 
+                  style={{ width: '100%', background: 'rgba(6, 95, 70, 0.2)', color: '#4ade80', border: '1px solid rgba(74, 222, 128, 0.3)', padding: '10px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                >
+                  <FiStar /> ترشيح للتميز
+                </button>
               </div>
             </div>
-            <div style={{ marginTop: '20px', display: 'flex', gap: '10px' }}>
-              <button onClick={saveChanges} style={primaryBtn}>حفظ البيانات</button>
-              <button onClick={() => setEditingEmp(null)} style={secondaryBtn}>إلغاء الأمر</button>
-            </div>
-          </div>
-        </div>
-      )}
+          ))
+        ) : (
+          <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '50px', background: '#1e293b', borderRadius: '12px', color: '#94a3b8', border: '1px solid #334155' }}>لا توجد موظفين.</div>
+        )}
+      </div>
     </div>
   );
 }
 
-const filterBtn = { border: 'none', padding: '8px 16px', borderRadius: '20px', cursor: 'pointer', color: 'white', fontWeight: 'bold', fontSize: '0.8rem' };
-const cardStyle = { background: 'white', padding: '20px', borderRadius: '12px', color: '#1e293b' };
-const circleStyle = { width: '40px', height: '40px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 'bold' };
-const progressBg = { background: '#e2e8f0', height: '6px', borderRadius: '3px', marginBottom: '10px' };
-const progressBar = { background: '#3b82f6', height: '100%', borderRadius: '3px' };
-const actionIconBtn = { border: 'none', background: '#f1f5f9', borderRadius: '4px', padding: '4px 8px', cursor: 'pointer', fontSize: '0.8rem' };
-const modalStyle = { background: 'white', color: '#1e293b', padding: '30px', borderRadius: '16px', width: '700px' };
-const modalOverlay = { position: 'fixed' as const, top:0, left:0, right:0, bottom:0, background: 'rgba(0,0,0,0.5)', display:'flex', alignItems:'center', justifyContent:'center', zIndex: 1000 };
-const inputStyle = { padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0', width: '100%', marginTop: '5px' };
-const labelStyle = { fontSize: '0.75rem', color: '#64748b' };
-const rowStyle = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '15px' };
-const gridStyle = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' };
-const fieldGroup = { display: 'flex', flexDirection: 'column' as const };
-const kpiBox = { background: '#f8fafc', padding: '15px', borderRadius: '12px', marginTop: '20px' };
-const primaryBtn = { background: '#2563eb', color: 'white', padding: '10px 20px', borderRadius: '8px', border: 'none', cursor: 'pointer' };
-const secondaryBtn = { background: 'transparent', color: '#64748b', padding: '10px 20px', borderRadius: '8px', border: '1px solid #e2e8f0', cursor: 'pointer' };
+const cardStyle = { background: '#1e293b', padding: '20px', borderRadius: '16px', color: 'white', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.2)', border: '1px solid #334155', boxSizing: 'border-box' as const };
+const circleStyle = { width: '42px', height: '42px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 'bold', fontSize: '1.1rem' };
+const progressBg = { background: '#0f172a', height: '10px', borderRadius: '5px', marginBottom: '10px', overflow: 'hidden', border: '1px solid #334155' };
+const progressBar = { background: '#3b82f6', height: '100%', borderRadius: '5px', transition: 'width 0.5s ease-in-out' };
+const primaryBtn = { background: '#2563eb', color: 'white', padding: '10px 18px', borderRadius: '10px', border: 'none', cursor: 'pointer', fontWeight: 'bold', display: 'flex', alignItems: 'center', fontSize: '0.9rem' };

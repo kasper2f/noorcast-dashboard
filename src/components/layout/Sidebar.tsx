@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../../firebase/config'; 
+import { useAuthContext } from '@/context/AuthContext';
 
 const sectionTitleStyle = { 
   fontSize: '0.85rem', 
@@ -17,13 +18,26 @@ const sectionStyle = { marginBottom: '20px' };
 
 export default function Sidebar() {
   const [role, setRole] = useState<string | null>(null);
+  const { adminData } = useAuthContext();
   const [isFinanceOpen, setIsFinanceOpen] = useState(true);
   const [isMarketingOpen, setIsMarketingOpen] = useState(true);
   const [isOpsOpen, setIsOpsOpen] = useState(true);
   const [isHROpen, setIsHROpen] = useState(true);
   const [isCRMOpen, setIsCRMOpen] = useState(true);
   const [isSalesOpen, setIsSalesOpen] = useState(true);
-  const [isOpen, setIsOpen] = useState(window.innerWidth > 768);
+  const [isOpen, setIsOpen] = useState(false);
+
+  // الاستماع لحدث فتح/إغلاق القائمة القادم من زر الهيدر
+  useEffect(() => {
+    const handleToggleSidebar = () => {
+      setIsOpen(prev => !prev);
+    };
+
+    window.addEventListener('toggle-sidebar', handleToggleSidebar);
+    return () => {
+      window.removeEventListener('toggle-sidebar', handleToggleSidebar);
+    };
+  }, []);
 
   useEffect(() => {
     const fetchUserRole = async () => {
@@ -39,147 +53,182 @@ export default function Sidebar() {
     fetchUserRole();
   }, []);
 
+  const isAdminOrGoogleAdmin = role === 'admin' || adminData !== null;
+
   return (
     <>
-      {/* زر التحكم بالقائمة الجانبية يظهر فقط في الشاشات الصغيرة */}
-      <button 
-        onClick={() => setIsOpen(!isOpen)}
-        style={{ 
-          position: 'fixed', 
-          top: '10px', 
-          right: '10px', 
-          zIndex: 1000, 
-          background: '#1e293b', 
-          color: 'white', 
-          border: 'none', 
-          padding: '10px', 
-          borderRadius: '5px', 
-          cursor: 'pointer',
-          display: window.innerWidth > 768 ? 'none' : 'block' 
+      {/* طبقة خلفية مظلمة تتلاشى بسلاسة وبشكل تفاعلي */}
+      <div 
+        onClick={() => setIsOpen(false)}
+        style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.6)',
+          zIndex: 998,
+          backdropFilter: 'blur(4px)',
+          WebkitBackdropFilter: 'blur(4px)',
+          opacity: isOpen && window.innerWidth <= 768 ? 1 : 0,
+          visibility: isOpen && window.innerWidth <= 768 ? 'visible' : 'hidden',
+          transition: 'opacity 0.35s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.35s cubic-bezier(0.4, 0, 0.2, 1)'
         }}
-      >
-        {isOpen ? '✕' : '≡ القائمة'}
-      </button>
+      />
 
       <aside style={{ 
-        width: isOpen ? '240px' : '0px', 
+        width: '260px', 
         background: '#0f172a', 
         height: '100vh', 
-        padding: isOpen ? '20px' : '0px', 
+        padding: '20px', 
         borderLeft: '1px solid #334155', 
         position: window.innerWidth <= 768 ? 'fixed' : 'relative', 
-        right: 0, 
+        right: window.innerWidth <= 768 ? (isOpen ? '0px' : '-260px') : '0', 
         top: 0, 
-        transition: '0.3s', 
+        // موشن وسلاسة عالية جداً في الحركة والإنزلاق
+        transition: window.innerWidth <= 768 ? 'right 0.35s cubic-bezier(0.16, 1, 0.3, 1)' : 'none', 
         zIndex: 999, 
-        overflowY: 'auto' 
+        overflowY: 'auto',
+        overflowX: 'hidden',
+        boxShadow: window.innerWidth <= 768 && isOpen ? '-10px 0 25px rgba(0,0,0,0.5)' : 'none'
       }}>
-        {isOpen && (
-          <nav style={{ marginTop: '50px' }}>
-            <div style={sectionStyle}><NavItem to="/" label="لوحة التحكم" /></div>
-
-            {/* 1. إدارة العملاء والشراكات */}
-            <div style={sectionStyle}>
-              <p style={sectionTitleStyle} onClick={() => setIsCRMOpen(!isCRMOpen)}>
-                العملاء والشراكات {isCRMOpen ? '▼' : '▲'}
-              </p>
-              {isCRMOpen && (
-                <div>
-                  <NavItem to="/crm/leads" label="العملاء المحتملون (Leads)" />
-                  <NavItem to="/crm/active" label="العملاء الفعليون" />
-                  <NavItem to="/crm/clients" label="قائمة العملاء (CRM)" />
-                </div>
-              )}
+        <nav style={{ marginTop: window.innerWidth <= 768 ? '10px' : '10px' }}>
+          
+          {/* زر إغلاق يدوي (✕) داخل السايد بار للجوال */}
+          {window.innerWidth <= 768 && (
+            <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: '15px' }}>
+              <button 
+                onClick={() => setIsOpen(false)}
+                style={{
+                  background: '#1e293b',
+                  color: '#ef4444',
+                  border: '1px solid #334155',
+                  borderRadius: '8px',
+                  width: '36px',
+                  height: '36px',
+                  cursor: 'pointer',
+                  fontSize: '1.1rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontWeight: 'bold',
+                  transition: 'transform 0.2s ease'
+                }}
+                onMouseDown={(e) => e.currentTarget.style.transform = 'scale(0.92)'}
+                onMouseUp={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                aria-label="إغلاق القائمة"
+              >
+                ✕
+              </button>
             </div>
+          )}
 
-            {/* 2. إدارة التشغيل */}
-            <div style={sectionStyle}>
-              <p style={sectionTitleStyle} onClick={() => setIsOpsOpen(!isOpsOpen)}>
-                إدارة التشغيل {isOpsOpen ? '▼' : '▲'}
-              </p>
-              {isOpsOpen && (
-                <div>
-                  <NavItem to="/projects" label="إدارة المشاريع" />
-                  <NavItem to="/tasks" label="إدارة المهام" />
-                  <NavItem to="/calendar" label="جدول التقويم" />
-                </div>
-              )}
-            </div>
+          <div style={sectionStyle}><NavItem to="/" label="لوحة التحكم" onClose={() => window.innerWidth <= 768 && setIsOpen(false)} /></div>
 
-            {/* 3. الحوكمة المالية */}
-            {(role === 'admin') && (
-              <div style={sectionStyle}>
-                <p style={sectionTitleStyle} onClick={() => setIsFinanceOpen(!isFinanceOpen)}>
-                  الحوكمة المالية {isFinanceOpen ? '▼' : '▲'}
-                </p>
-                {isFinanceOpen && (
-                  <div>
-                    <NavItem to="/finance/invoices" label="الفواتير والمطالبات" />
-                    <NavItem to="/finance/expenses" label="مسجل المصروفات" />
-                    <NavItem to="/finance/freelance" label="إدارة الفريلانسرز" />
-                    <NavItem to="/finance/cash-flow" label="التدفقات النقدية" />
-                    <NavItem to="/finance/pl" label="الأرباح والخسائر" />
-                  </div>
-                )}
+          {/* 1. إدارة العملاء والشراكات */}
+          <div style={sectionStyle}>
+            <p style={sectionTitleStyle} onClick={() => setIsCRMOpen(!isCRMOpen)}>
+              العملاء والشراكات {isCRMOpen ? '▼' : '▲'}
+            </p>
+            {isCRMOpen && (
+              <div>
+                <NavItem to="/crm/leads" label="العملاء المحتملون (Leads)" onClose={() => window.innerWidth <= 768 && setIsOpen(false)} />
+                <NavItem to="/crm/active" label="العملاء الفعليون" onClose={() => window.innerWidth <= 768 && setIsOpen(false)} />
+                <NavItem to="/crm/clients" label="قائمة العملاء (CRM)" onClose={() => window.innerWidth <= 768 && setIsOpen(false)} />
               </div>
             )}
+          </div>
 
-            {/* 4. إدارة التسويق */}
+          {/* 2. إدارة التشغيل */}
+          <div style={sectionStyle}>
+            <p style={sectionTitleStyle} onClick={() => setIsOpsOpen(!isOpsOpen)}>
+              إدارة التشغيل {isOpsOpen ? '▼' : '▲'}
+            </p>
+            {isOpsOpen && (
+              <div>
+                <NavItem to="/projects" label="إدارة المشاريع" onClose={() => window.innerWidth <= 768 && setIsOpen(false)} />
+                <NavItem to="/tasks" label="إدارة المهام" onClose={() => window.innerWidth <= 768 && setIsOpen(false)} />
+                <NavItem to="/calendar" label="جدول التقويم" onClose={() => window.innerWidth <= 768 && setIsOpen(false)} />
+                <NavItem to="/projects/freelancer-archive" label="المستقلون والمزودون" onClose={() => window.innerWidth <= 768 && setIsOpen(false)} />
+              </div>
+            )}
+          </div>
+
+          {/* 3. الحوكمة المالية */}
+          {isAdminOrGoogleAdmin && (
             <div style={sectionStyle}>
-              <p style={sectionTitleStyle} onClick={() => setIsMarketingOpen(!isMarketingOpen)}>
-                إدارة التسويق {isMarketingOpen ? '▼' : '▲'}
+              <p style={sectionTitleStyle} onClick={() => setIsFinanceOpen(!isFinanceOpen)}>
+                الحوكمة المالية {isFinanceOpen ? '▼' : '▲'}
               </p>
-              {isMarketingOpen && (
+              {isFinanceOpen && (
                 <div>
-                  <NavItem to="/marketing/campaigns" label="إدارة الحملات" />
-                  <NavItem to="/marketing/content" label="إدارة المحتوى" />
+                  <NavItem to="/finance/invoices" label="المطالبات" onClose={() => window.innerWidth <= 768 && setIsOpen(false)} />
+                  <NavItem to="/finance/expenses" label="الايرادات المصروفات" onClose={() => window.innerWidth <= 768 && setIsOpen(false)} />
+                  <NavItem to="/finance/fixed-expenses" label="المصروفات الثابتة والاشتراكات" onClose={() => window.innerWidth <= 768 && setIsOpen(false)} />
+                  <NavItem to="/finance/freelance" label="إدارة الفريلانسرز" onClose={() => window.innerWidth <= 768 && setIsOpen(false)} />
+                  <NavItem to="/finance/investors" label="مستحقات وحصص المستثمرين" onClose={() => window.innerWidth <= 768 && setIsOpen(false)} />
+                  <NavItem to="/finance/cash-flow" label="التدفقات النقدية" onClose={() => window.innerWidth <= 768 && setIsOpen(false)} />
+                  <NavItem to="/finance/pl" label="الأرباح والخسائر" onClose={() => window.innerWidth <= 768 && setIsOpen(false)} />
                 </div>
               )}
             </div>
+          )}
 
-            {/* 5. الموارد البشرية */}
-            <div style={sectionStyle}>
-              <p style={sectionTitleStyle} onClick={() => setIsHROpen(!isHROpen)}>
-                الموارد البشرية {isHROpen ? '▼' : '▲'}
-              </p>
-              {isHROpen && (
-                <div>
-                  <NavItem to="/hr" label="نظرة عامة" />
-                  <NavItem to="/hr/payroll" label="مسير الرواتب" />
-                  <NavItem to="/hr/performance" label="تقييم الأداء والتميز" />
-                </div>
-              )}
-            </div>
+          {/* 4. إدارة التسويق والنمو الذاتي */}
+          <div style={sectionStyle}>
+            <p style={sectionTitleStyle} onClick={() => setIsMarketingOpen(!isMarketingOpen)}>
+              إدارة التسويق {isMarketingOpen ? '▼' : '▲'}
+            </p>
+            {isMarketingOpen && (
+              <div>
+                <NavItem to="/marketing" label="غرفة عمليات التسويق 🚀" onClose={() => window.innerWidth <= 768 && setIsOpen(false)} />
+              </div>
+            )}
+          </div>
 
-            {/* 6. المبيعات والعقود */}
-            <div style={sectionStyle}>
-              <p style={sectionTitleStyle} onClick={() => setIsSalesOpen(!isSalesOpen)}>
-                المبيعات والعقود {isSalesOpen ? '▼' : '▲'}
-              </p>
-              {isSalesOpen && (
-                <div>
-                  <NavItem to="/sales/quotes" label="عروض الأسعار" />
-                  <NavItem to="/sales/contracts" label="العقود والاتفاقيات" />
-                </div>
-              )}
-            </div>
-          </nav>
-        )}
+          {/* 5. الموارد البشرية */}
+          <div style={sectionStyle}>
+            <p style={sectionTitleStyle} onClick={() => setIsHROpen(!isHROpen)}>
+              الموارد البشرية {isHROpen ? '▼' : '▲'}
+            </p>
+            {isHROpen && (
+              <div>
+                <NavItem to="/hr" label="نظرة عامة" onClose={() => window.innerWidth <= 768 && setIsOpen(false)} />
+                <NavItem to="/hr/payroll" label="مسير الرواتب" onClose={() => window.innerWidth <= 768 && setIsOpen(false)} />
+                <NavItem to="/hr/performance" label="تقييم الأداء والتميز" onClose={() => window.innerWidth <= 768 && setIsOpen(false)} />
+                <NavItem to="/hr/admin-control" label="التحكم الإداري والحوكمة" onClose={() => window.innerWidth <= 768 && setIsOpen(false)} />
+              </div>
+            )}
+          </div>
+
+          {/* 6. العقود والاتفاقيات */}
+          <div style={sectionStyle}>
+            <p style={sectionTitleStyle} onClick={() => setIsSalesOpen(!isSalesOpen)}>
+              الفواتير والعقود {isSalesOpen ? '▼' : '▲'}
+            </p>
+            {isSalesOpen && (
+              <div>
+                <NavItem to="/sales/contracts" label="مركز التحكم والارشفة" onClose={() => window.innerWidth <= 768 && setIsOpen(false)} />
+              </div>
+            )}
+          </div>
+        </nav>
       </aside>
     </>
   );
 }
 
-function NavItem({ to, label }: { to: string; label: string }) {
+function NavItem({ to, label, onClose }: { to: string; label: string; onClose?: () => void }) {
   const active = useLocation().pathname === to;
   const [isHovered, setIsHovered] = useState(false);
 
   return (
     <Link 
       to={to} 
+      onClick={onClose} 
       style={{ 
         display: 'block', 
-        padding: '8px 15px', 
+        padding: '10px 15px', 
         textDecoration: 'none', 
         color: active ? '#3b82f6' : (isHovered ? '#ffffff' : '#94a3b8'), 
         fontSize: '0.9rem', 
