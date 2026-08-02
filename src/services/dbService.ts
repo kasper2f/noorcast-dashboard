@@ -15,10 +15,8 @@ const firebaseConfig = {
   databaseURL: "https://noorcast-53ecf-default-rtdb.firebaseio.com/"
 };
 
-// التحقق مما إذا كانت نسخة Firebase مهيأة مسبقاً لتجنب التكرار والخطأ
 export const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
-// --- نظام فحص التبويبات الفارغة وتنبيه المستخدم ---
 const validateAndAlertEmptyData = (data: any, tabName: string) => {
   const isEmpty = !data || (Array.isArray(data) && data.length === 0) || (typeof data === 'object' && Object.keys(data).length === 0);
   if (isEmpty) {
@@ -27,7 +25,6 @@ const validateAndAlertEmptyData = (data: any, tabName: string) => {
   return data;
 };
 
-// --- نظام الإشعارات الفورية الحقيقي والسحابي (Web Push Notifications - FCM) ---
 export const requestNotificationPermission = async () => {
   try {
     if (typeof window === 'undefined' || !('Notification' in window)) {
@@ -39,7 +36,6 @@ export const requestNotificationPermission = async () => {
     if (permission === 'granted') {
       console.log('Notification permission granted.');
 
-      // محاولة جلب الرمز الحقيقي للجهاز وربطه سحابياً
       let token = 'noorcast-token-' + Math.random().toString(36).substring(2) + Date.now();
       
       try {
@@ -68,7 +64,6 @@ export const requestNotificationPermission = async () => {
       localStorage.setItem('notifications_enabled', 'true');
       console.log('🔥 Cloud Device Token Active:', token);
 
-      // حفظ الرمز وحالة التفعيل سحابياً في قوقل شيت عبر طلب POST
       const currentUserStr = localStorage.getItem('currentUser') || localStorage.getItem('userEmail') || localStorage.getItem('username') || 'abdullatif';
       
       await fetch(GOOGLE_SCRIPT_URL, {
@@ -106,7 +101,6 @@ export const onForegroundMessage = (callback?: (payload: any) => void) => {
   }
 };
 
-// --- نظام رفع الملفات والصور والفيديوهات السحابي إلى Cloudinary ---
 export const uploadFileToCloudinary = async (file: File): Promise<string> => {
   try {
     const formData = new FormData();
@@ -131,7 +125,6 @@ export const uploadFileToCloudinary = async (file: File): Promise<string> => {
   }
 };
 
-// --- نظام السجلات والتدقيق السحابي (Audit Logs) ---
 export const logDashboardAction = async (action: string, target: string, details: string) => {
   try {
     let userEmail = 'unknown@domain.com';
@@ -166,21 +159,6 @@ export const logDashboardAction = async (action: string, target: string, details
       }
     }
 
-    if (userEmail !== 'unknown@domain.com') {
-      try {
-        const response = await fetch(GOOGLE_SCRIPT_URL + '?action=getHR&_t=' + Date.now());
-        const hrData = await response.json();
-        if (Array.isArray(hrData)) {
-          const matchedEmp = hrData.find((emp: any) => String(emp.email || '').toLowerCase().trim() === userEmail.toLowerCase().trim());
-          if (matchedEmp && matchedEmp.username) {
-            username = matchedEmp.username; 
-          }
-        }
-      } catch (hrErr) {
-        console.error("Error fetching HR payroll for audit mapping:", hrErr);
-      }
-    }
-
     await fetch(GOOGLE_SCRIPT_URL, {
       method: 'POST',
       mode: 'no-cors',
@@ -211,7 +189,6 @@ export const getAuditLogs = async () => {
   }
 };
 
-// --- دوال الشؤون الإدارية والموارد البشرية سحابياً ---
 export const getHRActionLogs = async () => {
   try {
     const response = await fetch(GOOGLE_SCRIPT_URL + '?action=getHRActionLogs&_t=' + Date.now());
@@ -288,29 +265,6 @@ export const submitAdministrativeAction = async (actionData: {
         ...actionData 
       })
     });
-
-    const isFinancialDeduction = actionData.amount > 0 && 
-      (actionData.actionType.includes('خصم') || actionData.actionType.includes('غياب') || actionData.actionType.includes('جزاء'));
-
-    if (isFinancialDeduction) {
-      await saveExpenseToSheet({
-        id: 'EXP-' + Date.now(),
-        description: `خصم إداري (${actionData.actionType}) للموظف: @${actionData.employeeUsername} - السبب: ${actionData.reason}`,
-        category: 'خصومات جزاءات عمالية',
-        amount: Math.abs(actionData.amount),
-        responsible: actionData.employeeUsername,
-        date: new Date().toISOString().split('T')[0]
-      });
-    }
-
-    if (actionData.actionType.includes('إجازة')) {
-      await updateEmployeeStatusInSheet(actionData.employeeUsername, 'في إجازة 🌴');
-    } else if (actionData.actionType.includes('تنشيط') || actionData.actionType.includes('عودة')) {
-      await updateEmployeeStatusInSheet(actionData.employeeUsername, 'نشط ومتواجد بالخدمة');
-    } else if (actionData.actionType.includes('استقالة') || actionData.actionType.includes('استغناء')) {
-      await updateEmployeeStatusInSheet(actionData.employeeUsername, 'منتهي الخدمة 📄');
-    }
-
     return "Success";
   } catch (error) {
     console.error("Error submitting administrative action:", error);
@@ -318,7 +272,6 @@ export const submitAdministrativeAction = async (actionData: {
   }
 };
 
-// --- دوال الطلبات سحابياً (Orders) ---
 export const getOrders = async () => {
   try {
     const response = await fetch(GOOGLE_SCRIPT_URL + '?action=get&_t=' + Date.now());
@@ -330,6 +283,7 @@ export const getOrders = async () => {
   }
 };
 
+// --- دالة تحديث الطلب مع إرسال إشعار سحابي فوري عند التغيير ---
 export const updateOrderStatus = async (orderId: string, status: string, lastContactedBy?: string, notes?: string) => {
   try {
     const currentUserStr = localStorage.getItem('currentUser') || localStorage.getItem('adminUser') || '{}';
@@ -343,13 +297,24 @@ export const updateOrderStatus = async (orderId: string, status: string, lastCon
       }
     }
 
+    // 1. إرسال التحديث إلى قاعدة البيانات في السحابة
     await fetch(GOOGLE_SCRIPT_URL, {
       method: 'POST',
       mode: 'no-cors',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'update', orderId, status, lastContactedBy: activeUser, notes })
+      body: JSON.stringify({ 
+        action: 'update', 
+        orderId, 
+        status, 
+        lastContactedBy: activeUser, 
+        notes,
+        triggerNotification: true,
+        notificationTitle: 'تحديث حالة الطلب 🔔',
+        notificationBody: `تم تغيير حالة الطلب #${orderId} إلى: [${status}] بواسطة ${activeUser}`
+      })
     });
 
+    // 2. تسجيل الحدث في سجل التدقيق السحابي
     await logDashboardAction(
       'UPDATE_ORDER',
       `Order #${orderId}`,
@@ -363,7 +328,6 @@ export const updateOrderStatus = async (orderId: string, status: string, lastCon
   }
 };
 
-// --- دوال المشرفين سحابياً (Admins) ---
 export const getAdmins = async () => {
   try {
     const response = await fetch(GOOGLE_SCRIPT_URL + '?action=getAdmins&_t=' + Date.now());
@@ -375,12 +339,10 @@ export const getAdmins = async () => {
   }
 };
 
-// --- دوال الخدمات والكوبونات سحابياً ---
 export const getServices = async () => {
   try {
     const response = await fetch(GOOGLE_SCRIPT_URL + '?action=getServices&_t=' + Date.now());
     const data = await response.json();
-    
     const validData = validateAndAlertEmptyData(data, 'Services');
     return Array.isArray(validData) ? validData.map((s: any) => ({
       ...s,
@@ -451,12 +413,10 @@ export const deleteService = async (serviceId: string) => {
   }
 };
 
-// --- دوال الحوكمة المالية سحابياً ---
 export const getExpensesSheet = async () => {
   try {
     const response = await fetch(GOOGLE_SCRIPT_URL + '?action=getExpenses&_t=' + Date.now());
     const data = await response.json();
-    
     const validData = validateAndAlertEmptyData(data, 'ExpensesSheet');
     if (Array.isArray(validData)) {
       return validData.filter((item: any) => {
@@ -472,23 +432,13 @@ export const getExpensesSheet = async () => {
   }
 };
 
-export const saveExpenseToSheet = async (expenseData: {
-  id?: string;
-  description: string;
-  category: string;
-  amount: number;
-  responsible: string;
-  date: string;
-}) => {
+export const saveExpenseToSheet = async (expenseData: any) => {
   try {
     await fetch(GOOGLE_SCRIPT_URL, {
       method: 'POST',
       mode: 'no-cors',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'addExpense',
-        ...expenseData
-      })
+      body: JSON.stringify({ action: 'addExpense', ...expenseData })
     });
     await logDashboardAction('SAVE_EXPENSE', expenseData.description, `تم حفظ مصروف بمبلغ ${expenseData.amount} ر.س`);
     return "Success";
@@ -515,10 +465,7 @@ export const addHREntryToSheet = async (hrData: any) => {
       method: 'POST',
       mode: 'no-cors',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'addHR',
-        ...hrData
-      })
+      body: JSON.stringify({ action: 'addHR', ...hrData })
     });
     await logDashboardAction('ADD_HR_EMPLOYEE', hrData.name || 'Employee', `تمت إضافة الموظف براتب ${hrData.salary || 0} ر.س`);
     return "Success";
@@ -539,24 +486,13 @@ export const getInvestorsSheet = async () => {
   }
 };
 
-export const saveInvestorToSheet = async (investorData: {
-  investorId: string;
-  name: string;
-  ownershipPercentage: number;
-  investedAmount: number;
-  payoutCycle?: string;
-  payoutStatus: string;
-  notes: string;
-}) => {
+export const saveInvestorToSheet = async (investorData: any) => {
   try {
     await fetch(GOOGLE_SCRIPT_URL, {
       method: 'POST',
       mode: 'no-cors',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'saveInvestor',
-        ...investorData
-      })
+      body: JSON.stringify({ action: 'saveInvestor', ...investorData })
     });
     await logDashboardAction('SAVE_INVESTOR', investorData.name, `تم حفظ بيانات المستثمر بنسبة ملكية ${investorData.ownershipPercentage}%`);
     return "Success";
@@ -566,7 +502,6 @@ export const saveInvestorToSheet = async (investorData: {
   }
 };
 
-// --- دوال الفواتير والعقود وعروض الأسعار سحابياً ---
 export const getInvoicesSheet = async () => {
   try {
     const response = await fetch(GOOGLE_SCRIPT_URL + '?action=getInvoices&_t=' + Date.now());
@@ -621,7 +556,6 @@ export const saveIncomingBillToSheet = async (billData: any) => {
   }
 };
 
-// 1. عقود العملاء
 export const getClientContractsSheet = async () => {
   try {
     const response = await fetch(GOOGLE_SCRIPT_URL + '?action=getClientContracts&_t=' + Date.now());
@@ -648,7 +582,6 @@ export const saveClientContractToSheet = async (contractData: any) => {
   }
 };
 
-// 2. عقود الموظفين
 export const getEmployeeContractsSheet = async () => {
   try {
     const response = await fetch(GOOGLE_SCRIPT_URL + '?action=getEmployeeContracts&_t=' + Date.now());
@@ -675,7 +608,6 @@ export const saveEmployeeContractToSheet = async (contractData: any) => {
   }
 };
 
-// 3. عقود المستقلين
 export const getFreelancerContractsSheet = async () => {
   try {
     const response = await fetch(GOOGLE_SCRIPT_URL + '?action=getFreelancerContracts&_t=' + Date.now());
@@ -702,7 +634,6 @@ export const saveFreelancerContractToSheet = async (contractData: any) => {
   }
 };
 
-// 4. المستندات العامة والقانونية
 export const getGeneralDocumentsSheet = async () => {
   try {
     const response = await fetch(GOOGLE_SCRIPT_URL + '?action=getGeneralDocuments&_t=' + Date.now());
@@ -729,7 +660,6 @@ export const saveGeneralDocumentToSheet = async (docData: any) => {
   }
 };
 
-// --- دوال غرفة عمليات التسويق وسوسيال ميديا سحابياً (MarketingSocial) ---
 export const getMarketingSocialSheet = async () => {
   try {
     const response = await fetch(GOOGLE_SCRIPT_URL + '?action=getMarketingSocial&_t=' + Date.now());
@@ -797,7 +727,6 @@ export const saveQuoteToSheet = async (quoteData: any) => {
   }
 };
 
-// --- دوال ورقة أرشيف المستقلين التشغيلي (freelance) ---
 export const getFreelanceSheet = async () => {
   try {
     const response = await fetch(GOOGLE_SCRIPT_URL + '?action=getFreelance&_t=' + Date.now());
@@ -839,7 +768,6 @@ export const deleteFreelanceFromSheet = async (id: string) => {
   }
 };
 
-// --- دوال ورقة الالتزامات المالية للمستقلين (freelancefinance) ---
 export const getFreelanceFinanceSheet = async () => {
   try {
     const response = await fetch(GOOGLE_SCRIPT_URL + '?action=getFreelanceFinance&_t=' + Date.now());
@@ -881,7 +809,6 @@ export const deleteFreelanceFinanceFromSheet = async (id: string) => {
   }
 };
 
-// --- دوال المشاريع سحابياً (Projects) ---
 export const getProjects = async () => {
   try {
     const response = await fetch(GOOGLE_SCRIPT_URL + '?action=getProjects&_t=' + Date.now());
@@ -925,7 +852,6 @@ export const deleteProjectFromSheet = async (projectId: string) => {
   }
 };
 
-// --- دوال المهام سحابياً (Tasks) ---
 export const getTasks = async () => {
   try {
     const response = await fetch(GOOGLE_SCRIPT_URL + '?action=getTasks&_t=' + Date.now());

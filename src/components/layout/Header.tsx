@@ -108,8 +108,8 @@ export function Header({ userIdentifier }: { userIdentifier?: string; onToggleSi
             text-overflow: ellipsis !important;
           }
           .header-logout-btn, .header-notif-btn {
-            padding: 5px 8px !important;
-            font-size: 0.72rem !important;
+            padding: 6px 10px !important;
+            font-size: 0.75rem !important;
           }
         }
       `}</style>
@@ -156,16 +156,27 @@ export function Header({ userIdentifier }: { userIdentifier?: string; onToggleSi
           )}
         </div>
 
-        {/* القسم الأيسر: زر تفعيل الإشعارات + زر تسجيل الخروج */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        {/* القسم الأيسر: أيقونة الجرس الإشعارات + زر تسجيل الخروج */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <button 
             type="button" 
             className="header-notif-btn" 
             onClick={handleEnablePushNotifications} 
             title="تفعيل تنبيهات الجوال والداشبورد"
-            style={{ background: 'rgba(37, 99, 235, 0.15)', color: '#38bdf8', border: '1px solid rgba(56, 189, 248, 0.3)', padding: '6px 12px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem' }}
+            style={{ 
+              background: 'rgba(37, 99, 235, 0.15)', 
+              color: '#38bdf8', 
+              border: '1px solid rgba(56, 189, 248, 0.3)', 
+              width: '36px', 
+              height: '36px', 
+              borderRadius: '8px', 
+              cursor: 'pointer', 
+              display: 'inline-flex', 
+              alignItems: 'center', 
+              justifyContent: 'center' 
+            }}
           >
-            <FiBell size={15} /> تنبيهات الجوال
+            <FiBell size={18} />
           </button>
 
           <button 
