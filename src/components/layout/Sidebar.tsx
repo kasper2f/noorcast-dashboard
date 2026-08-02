@@ -201,14 +201,15 @@ export default function Sidebar() {
             )}
           </div>
 
-          {/* 6. العقود والاتفاقيات */}
+          {/* 6. الفواتير والعقود والأرشيف المنظم */}
           <div style={sectionStyle}>
             <p style={sectionTitleStyle} onClick={() => setIsSalesOpen(!isSalesOpen)}>
               الفواتير والعقود {isSalesOpen ? '▼' : '▲'}
             </p>
             {isSalesOpen && (
               <div>
-                <NavItem to="/sales/contracts" label="مركز التحكم والارشفة" onClose={() => window.innerWidth <= 768 && setIsOpen(false)} />
+                <NavItem to="/sales/contracts" label="الفواتير وعروض الأسعار" onClose={() => window.innerWidth <= 768 && setIsOpen(false)} />
+                <NavItem to="/sales/archive" label="العقود والأرشيف القانوني" onClose={() => window.innerWidth <= 768 && setIsOpen(false)} />
               </div>
             )}
           </div>

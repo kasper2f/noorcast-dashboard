@@ -1,13 +1,42 @@
 import { useState, useEffect } from 'react';
-import { FiPlus, FiFileText, FiDownload, FiBriefcase, FiDollarSign, FiSettings, FiEdit2, FiTrash2, FiSearch, FiUserCheck, FiCreditCard, FiUpload } from 'react-icons/fi';
-import { saveInvoiceToSheet, saveExpenseToSheet, saveIncomingBillToSheet, getFreelanceFinanceSheet, saveFreelanceFinanceToSheet } from '@/services/dbService';
+import { FiPlus, FiFileText, FiDownload, FiDollarSign, FiSettings, FiEdit2, FiTrash2, FiSearch, FiCreditCard, FiUpload, FiRefreshCw } from 'react-icons/fi';
+import {  
+  saveInvoiceToSheet,  
+  saveExpenseToSheet,  
+  saveIncomingBillToSheet,  
+  getFreelanceFinanceSheet,  
+  saveFreelanceFinanceToSheet,
+  getInvoicesSheet,
+  getIncomingBillsSheet,
+  getQuotesSheet,
+  saveQuoteToSheet,
+  uploadFileToCloudinary
+} from '@/services/dbService';
 
 export default function SalesContractsPage() {
-  const [activeTab, setActiveTab] = useState<'quotes' | 'clients_contracts' | 'freelancer_contracts' | 'invoices' | 'incoming_bills'>('quotes');
+  const [activeTab, setActiveTab] = useState<'quotes' | 'invoices' | 'incoming_bills'>('quotes');
+  
   const [searchTerm, setSearchTerm] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [loadingCloud, setLoadingCloud] = useState(false);
 
   const noorcastLogoUrl = 'https://res.cloudinary.com/dfwfh4xzb/image/upload/v1782727817/WhatsApp_Image_2026-06-21_at_12.56.07_AM_dhzswc.png';
+
+  const formatDate = (dateStr: any) => {
+    if (!dateStr) return '-';
+    try {
+      const cleanStr = String(dateStr).split('T')[0].split(' ')[0];
+      const dateObj = new Date(cleanStr);
+      if (isNaN(dateObj.getTime())) return cleanStr;
+      
+      const year = dateObj.getFullYear();
+      const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+      const day = String(dateObj.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    } catch {
+      return String(dateStr).substring(0, 10);
+    }
+  };
 
   const [companyInfo, setCompanyInfo] = useState(() => {
     try {
@@ -16,102 +45,118 @@ export default function SalesContractsPage() {
         name: 'شركة نوركاست للإعلام والإنتاج',
         crNumber: '1010000000',
         vatNumber: '300000000000003',
-        city: 'الرياض، المملكة العربية السعودية'
+        city: 'الرياض، المملكة العربية السعودية',
+        bankName: 'مصرف الراجحي',
+        bankAccountName: 'شركة نوركاست للإعلام والإنتاج',
+        bankIban: 'SA0380000000108010000003'
       };
     } catch {
-      return { name: 'شركة نوركاست للإعلام والإنتاج', crNumber: '1010000000', vatNumber: '300000000000003', city: 'الرياض' };
+      return { 
+        name: 'شركة نوركاست للإعلام والإنتاج', 
+        crNumber: '1010000000', 
+        vatNumber: '300000000000003', 
+        city: 'الرياض',
+        bankName: 'مصرف الراجحي',
+        bankAccountName: 'شركة نوركاست للإعلام والإنتاج',
+        bankIban: 'SA0380000000108010000003'
+      };
     }
   });
 
   const [isEditingProfile, setIsEditingProfile] = useState(false);
 
-  const [quotes, setQuotes] = useState<any[]>(() => {
-    try {
-      const saved = localStorage.getItem('noorcast_official_quotes');
-      return saved ? JSON.parse(saved) : [
-        { id: 'QT-2026-01', client: 'شركة التقنية المتقدمة', clientTaxNumber: '300111222333003', serviceType: 'إنتاج هوية بصرية متكاملة', amount: 15000, vat: 2250, total: 17250, terms: 'صالح لمدة 15 يوماً.', date: '2026-07-28' }
-      ];
-    } catch { return []; }
-  });
-
-  const [clientContracts, setClientContracts] = useState<any[]>(() => {
-    try {
-      const saved = localStorage.getItem('noorcast_client_contracts_archive');
-      return saved ? JSON.parse(saved) : [
-        { id: 'CON-C-101', title: 'عقد تقديم خدمات إنتاج مرئي', party: 'مؤسسة أفق الابداعية', type: 'عميل', value: '15,000 ر.س', fileName: 'contract_ofoq_signed.pdf', fileUrl: null, date: '2026-07-01' }
-      ];
-    } catch { return []; }
-  });
-
-  const [freelancerContracts, setFreelancerContracts] = useState<any[]>(() => {
-    try {
-      const saved = localStorage.getItem('noorcast_freelancer_contracts');
-      return saved ? JSON.parse(saved) : [
-        { id: 'CON-F-501', freelancerName: 'أحمد العتيبي', projectTask: 'تصميم موشن جرافيك', amount: 2500, duration: 'أسبوعين', date: '2026-07-15' }
-      ];
-    } catch { return []; }
-  });
-
-  const [invoices, setInvoices] = useState<any[]>(() => {
-    try {
-      const saved = localStorage.getItem('noorcast_tax_invoices');
-      return saved ? JSON.parse(saved) : [];
-    } catch { return []; }
-  });
-
-  const [incomingBills, setIncomingBills] = useState<any[]>(() => {
-    try {
-      const saved = localStorage.getItem('noorcast_incoming_bills');
-      return saved ? JSON.parse(saved) : [];
-    } catch { return []; }
-  });
+  const [quotes, setQuotes] = useState<any[]>([]);
+  const [invoices, setInvoices] = useState<any[]>([]);
+  const [incomingBills, setIncomingBills] = useState<any[]>([]);
 
   const [isQuoteModalOpen, setIsQuoteModalOpen] = useState(false);
-  const [isClientContractModalOpen, setIsClientContractModalOpen] = useState(false);
-  const [isFreelancerModalOpen, setIsFreelancerModalOpen] = useState(false);
   const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
   const [isBillModalOpen, setIsBillModalOpen] = useState(false);
   
   const [editingQuoteId, setEditingQuoteId] = useState<string | null>(null);
 
   const [newQuote, setNewQuote] = useState({ clientName: '', clientTaxNumber: '', serviceType: '', amount: 0, terms: 'صالح لمدة 15 يوماً.' });
-  const [newClientContract, setNewClientContract] = useState({ title: '', party: '', type: 'عميل', value: '', file: null as File | null });
-  const [newFreelancer, setNewFreelancer] = useState({ freelancerName: '', projectTask: '', amount: 0, duration: 'أسبوع واحد' });
   const [newInvoice, setNewInvoice] = useState({ clientName: '', clientTaxNumber: '', serviceType: '', amount: 0, status: 'تم الإرسال', dueDate: new Date().toISOString().split('T')[0], file: null as File | null });
   
-  const [newBill, setNewBill] = useState({ 
-    supplier: '', 
-    category: 'إيجار المقر', 
-    customCategory: '', 
-    amount: 0, 
-    status: 'مسددة', 
+  const [newBill, setNewBill] = useState({  
+    supplier: '',  
+    category: 'إيجار المقر',  
+    customCategory: '',  
+    amount: 0,  
+    status: 'مسددة',  
     frequency: 'شهري',
     isTaxable: true,
-    dueDate: new Date().toISOString().split('T')[0], 
-    file: null as File | null 
+    dueDate: new Date().toISOString().split('T')[0],  
+    file: null as File | null  
   });
 
-  const clearFinancialCache = () => {
-    localStorage.removeItem('noorcast_cached_invoices');
-    localStorage.removeItem('noorcast_cached_expenses');
-    localStorage.removeItem('noorcast_cached_bills');
+  useEffect(() => {
+    loadCloudDocuments();
+  }, []);
+
+  const loadCloudDocuments = async () => {
+    try {
+      setLoadingCloud(true);
+      const [cloudQuotes, cloudInvoices, cloudBills] = await Promise.all([
+        getQuotesSheet().catch(() => []),
+        getInvoicesSheet().catch(() => []),
+        getIncomingBillsSheet().catch(() => [])
+      ]);
+
+      if (Array.isArray(cloudQuotes)) {
+        setQuotes(cloudQuotes.map((q: any) => ({
+          id: String(q.id || 'QT-2026'),
+          client: String(q.client || ''),
+          clientTaxNumber: String(q.clientTaxNumber || ''),
+          serviceType: String(q.serviceType || ''),
+          amount: Number(q.amount || 0),
+          vat: Number(q.vat || 0),
+          total: Number(q.total || 0),
+          terms: String(q.terms || ''),
+          fileUrl: q.fileUrl || '',
+          date: formatDate(q.date)
+        })));
+      }
+
+      if (Array.isArray(cloudInvoices)) {
+        setInvoices(cloudInvoices.map((inv: any) => ({
+          id: String(inv.id || inv.number || 'INV'),
+          client: String(inv.client || ''),
+          clientTaxNumber: String(inv.clientTaxNumber || ''),
+          serviceType: String(inv.serviceType || ''),
+          amount: Number(inv.amount || 0) / 1.15,
+          vat: Number(inv.amount || 0) - (Number(inv.amount || 0) / 1.15),
+          total: Number(inv.amount || 0),
+          status: String(inv.status || 'تم الإرسال'),
+          dueDate: formatDate(inv.dueDate),
+          date: formatDate(inv.date),
+          fileUrl: inv.fileUrl || '',
+          fileName: inv.fileUrl ? 'فاتورة_صادرة.pdf' : ''
+        })));
+      }
+
+      if (Array.isArray(cloudBills)) {
+        setIncomingBills(cloudBills.map((b: any) => ({
+          id: String(b.id || 'BILL'),
+          supplier: String(b.supplier || ''),
+          category: String(b.category || ''),
+          amount: Number(b.amount || 0),
+          frequency: String(b.frequency || 'شهري'),
+          dueDate: formatDate(b.dueDate),
+          date: formatDate(b.date),
+          status: String(b.status || 'مسددة'),
+          isTaxable: b.isTaxable !== false && b.isTaxable !== 'false',
+          fileUrl: b.fileUrl || '',
+          fileName: b.fileUrl ? 'فاتورة_التزام.pdf' : ''
+        })));
+      }
+    } catch (err) {
+      console.error("خطأ في جلب بيانات الفواتير سحابياً:", err);
+    } finally {
+      setLoadingCloud(false);
+    }
   };
 
-  useEffect(() => { try { localStorage.setItem('noorcast_official_quotes', JSON.stringify(quotes)); } catch {} }, [quotes]);
-  useEffect(() => { try { localStorage.setItem('noorcast_client_contracts_archive', JSON.stringify(clientContracts)); } catch {} }, [clientContracts]);
-  useEffect(() => { try { localStorage.setItem('noorcast_freelancer_contracts', JSON.stringify(freelancerContracts)); } catch {} }, [freelancerContracts]);
-  useEffect(() => { 
-    try { 
-      localStorage.setItem('noorcast_tax_invoices', JSON.stringify(invoices)); 
-      clearFinancialCache();
-    } catch {} 
-  }, [invoices]);
-  useEffect(() => { 
-    try { 
-      localStorage.setItem('noorcast_incoming_bills', JSON.stringify(incomingBills)); 
-      clearFinancialCache();
-    } catch {} 
-  }, [incomingBills]);
   useEffect(() => { try { localStorage.setItem('noorcast_company_profile', JSON.stringify(companyInfo)); } catch {} }, [companyInfo]);
 
   const syncFreelancerStatusOnBillPaid = async (supplierName: string) => {
@@ -137,7 +182,6 @@ export default function SalesContractsPage() {
     try {
       const updated = invoices.map(inv => inv.id === id ? { ...inv, status: newStatus } : inv);
       setInvoices(updated);
-      clearFinancialCache();
       
       const targetInv = updated.find(i => i.id === id);
       if (targetInv) {
@@ -148,13 +192,14 @@ export default function SalesContractsPage() {
           amount: targetInv.total || targetInv.amount,
           status: newStatus,
           dueDate: targetInv.dueDate || new Date().toISOString().split('T')[0],
-          isExternal: true
+          isExternal: true,
+          fileUrl: targetInv.fileUrl || ''
         });
       }
-      alert(`تم تحديث حالة الفاتورة الصادرة إلى [${newStatus}] بنجاح! 🔄☁️`);
+      alert(`تم تحديث حالة الفاتورة الصادرة إلى [${newStatus}] سحابياً بنجاح! 🔄☁️`);
     } catch (err) {
       console.error(err);
-      alert("حدث خطأ أثناء التحديث.");
+      alert("حدث خطأ أثناء التحديث السحابي.");
     } finally {
       setIsSubmitting(false);
     }
@@ -172,7 +217,6 @@ export default function SalesContractsPage() {
         return bill;
       });
       setIncomingBills(updated);
-      clearFinancialCache();
 
       if (targetBill) {
         await saveIncomingBillToSheet({
@@ -184,7 +228,8 @@ export default function SalesContractsPage() {
           frequency: targetBill.frequency,
           dueDate: targetBill.dueDate,
           date: targetBill.date,
-          isTaxable: targetBill.isTaxable ?? true
+          isTaxable: targetBill.isTaxable ?? true,
+          fileUrl: targetBill.fileUrl || ''
         });
 
         if (newStatus === 'مسددة') {
@@ -210,54 +255,109 @@ export default function SalesContractsPage() {
     }
   };
 
-  const handleUploadInvoiceFile = (id: string, file: File) => {
-    const fileUrl = URL.createObjectURL(file);
-    const updated = invoices.map(inv => inv.id === id ? { ...inv, fileName: file.name, fileUrl } : inv);
-    setInvoices(updated);
-    alert(`تم إرفاق ملف الفاتورة الصادرة (${file.name}) بنجاح! 📎`);
+  const handleUploadInvoiceFile = async (id: string, file: File) => {
+    setIsSubmitting(true);
+    try {
+      const fileUrl = await uploadFileToCloudinary(file);
+      const updated = invoices.map(inv => inv.id === id ? { ...inv, fileName: file.name, fileUrl } : inv);
+      setInvoices(updated);
+
+      const targetInv = updated.find(i => i.id === id);
+      if (targetInv) {
+        await saveInvoiceToSheet({
+          id: targetInv.id,
+          number: targetInv.id,
+          client: targetInv.client,
+          amount: targetInv.total || targetInv.amount,
+          status: targetInv.status,
+          dueDate: targetInv.dueDate,
+          isExternal: true,
+          fileUrl
+        });
+      }
+      alert(`تم رفع ملف الفاتورة الصادرة سحابياً بنجاح! 📎☁️`);
+    } catch (err) {
+      console.error(err);
+      alert("فشل رفع الملف للسحابة.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleRemoveInvoiceFile = (id: string) => {
-    const updated = invoices.map(inv => inv.id === id ? { ...inv, fileName: '', fileUrl: null } : inv);
-    setInvoices(updated);
-    alert("تمت إزالة المرفق بنجاح! ❌");
+  const handleUploadBillFile = async (id: string, file: File) => {
+    setIsSubmitting(true);
+    try {
+      const fileUrl = await uploadFileToCloudinary(file);
+      const updated = incomingBills.map(b => b.id === id ? { ...b, fileName: file.name, fileUrl } : b);
+      setIncomingBills(updated);
+
+      const targetBill = updated.find(b => b.id === id);
+      if (targetBill) {
+        await saveIncomingBillToSheet({
+          id: targetBill.id,
+          supplier: targetBill.supplier,
+          category: targetBill.category,
+          amount: targetBill.amount,
+          status: targetBill.status,
+          frequency: targetBill.frequency,
+          dueDate: targetBill.dueDate,
+          date: targetBill.date,
+          isTaxable: targetBill.isTaxable,
+          fileUrl
+        });
+      }
+      alert(`تم رفع ملف الالتزام سحابياً بنجاح! 📎☁️`);
+    } catch (err) {
+      console.error(err);
+      alert("فشل رفع الملف للسحابة.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleUploadBillFile = (id: string, file: File) => {
-    const fileUrl = URL.createObjectURL(file);
-    const updated = incomingBills.map(b => b.id === id ? { ...b, fileName: file.name, fileUrl } : b);
-    setIncomingBills(updated);
-    alert(`تم إرفاق ملف الفاتورة الواردة (${file.name}) بنجاح! 📎`);
-  };
-
-  const handleRemoveBillFile = (id: string) => {
-    const updated = incomingBills.map(b => b.id === id ? { ...b, fileName: '', fileUrl: null } : b);
-    setIncomingBills(updated);
-    alert("تمت إزالة المرفق بنجاح! ❌");
-  };
-
-  const handleSaveQuote = (e: React.FormEvent) => {
+  const handleSaveQuote = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newQuote.clientName || !newQuote.amount) { alert("أدخل اسم العميل والمبلغ."); return; }
     setIsSubmitting(true);
     
-    setTimeout(() => {
+    try {
       const subTotal = Number(newQuote.amount);
       const vat = subTotal * 0.15;
       const total = subTotal + vat;
+      const quoteId = editingQuoteId || `QT-2026-${Math.floor(100 + Math.random() * 900)}`;
 
+      const quoteData = {
+        id: quoteId,
+        client: newQuote.clientName,
+        clientTaxNumber: newQuote.clientTaxNumber,
+        serviceType: newQuote.serviceType,
+        amount: subTotal,
+        vat,
+        total,
+        terms: newQuote.terms,
+        fileUrl: '',
+        date: new Date().toISOString().split('T')[0]
+      };
+
+      await saveQuoteToSheet(quoteData);
+
+      const formattedQuote = { ...quoteData, date: formatDate(quoteData.date) };
       if (editingQuoteId) {
-        setQuotes(quotes.map(q => q.id === editingQuoteId ? { ...q, ...newQuote, client: newQuote.clientName, amount: subTotal, vat, total } : q));
+        setQuotes(quotes.map(q => q.id === editingQuoteId ? formattedQuote : q));
         setEditingQuoteId(null);
       } else {
-        const created = { id: `QT-2026-${Math.floor(100 + Math.random() * 900)}`, client: newQuote.clientName, clientTaxNumber: newQuote.clientTaxNumber, serviceType: newQuote.serviceType, amount: subTotal, vat, total, terms: newQuote.terms, date: new Date().toISOString().split('T')[0] };
-        setQuotes([created, ...quotes]);
+        setQuotes([formattedQuote, ...quotes]);
       }
+
       setIsQuoteModalOpen(false);
       setNewQuote({ clientName: '', clientTaxNumber: '', serviceType: '', amount: 0, terms: 'صالح لمدة 15 يوماً.' });
+      alert("تم حفظ عرض السعر وترحيله سحابياً بنجاح! ✅☁️");
+    } catch (err) {
+      console.error(err);
+      alert("حدث خطأ أثناء الحفظ السحابي.");
+    } finally {
       setIsSubmitting(false);
-      alert("تم الحفظ بنجاح! ✅");
-    }, 300);
+    }
   };
 
   const handleEditQuote = (q: any) => {
@@ -267,62 +367,21 @@ export default function SalesContractsPage() {
   };
   const handleDeleteQuote = (id: string) => { if (confirm("حذف العرض؟")) setQuotes(quotes.filter(q => q.id !== id)); };
 
-  const handleUploadClientContract = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newClientContract.title || !newClientContract.party) { alert("أدخل البيانات الأساسية."); return; }
-    setIsSubmitting(true);
-
-    setTimeout(() => {
-      const fileObj = newClientContract.file;
-      const fileUrl = fileObj ? URL.createObjectURL(fileObj) : '';
-      const created = {
-        id: `CON-${Math.floor(100 + Math.random() * 900)}`,
-        title: newClientContract.title,
-        party: newClientContract.party,
-        type: newClientContract.type,
-        value: newClientContract.value || 'حسب الاتفاق',
-        fileName: fileObj ? fileObj.name : 'عقد_رسمي.pdf',
-        fileUrl,
-        date: new Date().toISOString().split('T')[0]
-      };
-      setClientContracts([created, ...clientContracts]);
-      setIsClientContractModalOpen(false);
-      setNewClientContract({ title: '', party: '', type: 'عميل', value: '', file: null });
-      setIsSubmitting(false);
-      alert("تم أرشفة ملف الـ PDF بنجاح! 📁");
-    }, 300);
-  };
-  const handleDeleteClientContract = (id: string) => { if (confirm("حذف العقد؟")) setClientContracts(clientContracts.filter(c => c.id !== id)); };
-
-  const handleSaveFreelancer = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newFreelancer.freelancerName || !newFreelancer.amount) { alert("أدخل اسم المستقل والمبلغ."); return; }
-    setIsSubmitting(true);
-
-    setTimeout(() => {
-      const created = { id: `CON-F-${Math.floor(100 + Math.random() * 900)}`, ...newFreelancer, date: new Date().toISOString().split('T')[0] };
-      setFreelancerContracts([created, ...freelancerContracts]);
-      setIsFreelancerModalOpen(false);
-      setNewFreelancer({ freelancerName: '', projectTask: '', amount: 0, duration: 'أسبوع واحد' });
-      setIsSubmitting(false);
-      alert("تم إصدار عقد المستقل بنجاح! 📄");
-    }, 300);
-  };
-  const handleDeleteFreelancer = (id: string) => { if (confirm("حذف العقد؟")) setFreelancerContracts(freelancerContracts.filter(f => f.id !== id)); };
-
   const handleCreateInvoice = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newInvoice.clientName || !newInvoice.amount) { alert("أدخل البيانات."); return; }
     
     setIsSubmitting(true);
     try {
+      let fileUrl = '';
+      if (newInvoice.file) {
+        fileUrl = await uploadFileToCloudinary(newInvoice.file);
+      }
+
       const subTotal = Number(newInvoice.amount);
       const vat = subTotal * 0.15;
       const total = subTotal + vat;
       const invoiceId = `INV-2026-${Math.floor(100 + Math.random() * 900)}`;
-      
-      const fileObj = newInvoice.file;
-      const fileUrl = fileObj ? URL.createObjectURL(fileObj) : '';
       
       const created = { 
         id: invoiceId, 
@@ -333,15 +392,14 @@ export default function SalesContractsPage() {
         vat, 
         total, 
         status: newInvoice.status, 
-        dueDate: newInvoice.dueDate, 
-        date: new Date().toISOString().split('T')[0],
-        fileName: fileObj ? fileObj.name : 'فاتورة_صادرة.pdf',
+        dueDate: formatDate(newInvoice.dueDate), 
+        date: formatDate(new Date()),
+        fileName: newInvoice.file ? newInvoice.file.name : 'فاتورة_صادرة.pdf',
         fileUrl,
         isExternal: true 
       };
       
       setInvoices([created, ...invoices]);
-      clearFinancialCache();
 
       await saveInvoiceToSheet({
         id: invoiceId,
@@ -350,12 +408,13 @@ export default function SalesContractsPage() {
         amount: total,
         status: created.status,
         dueDate: created.dueDate,
-        isExternal: true
+        isExternal: true,
+        fileUrl
       });
 
       setIsInvoiceModalOpen(false);
       setNewInvoice({ clientName: '', clientTaxNumber: '', serviceType: '', amount: 0, status: 'تم الإرسال', dueDate: new Date().toISOString().split('T')[0], file: null });
-      alert(`تم إصدار الفاتورة الصادرة بحالة [${created.status}] وحفظها سحابياً بنجاح! 💰☁️`);
+      alert(`تم إصدار الفاتورة وحفظها سحابياً بنجاح! 💰☁️`);
     } catch (err) {
       console.error(err);
       alert("حدث خطأ أثناء الإصدار والحفظ.");
@@ -367,7 +426,6 @@ export default function SalesContractsPage() {
   const handleDeleteInvoice = (id: string) => { 
     if (confirm("حذف الفاتورة؟")) {
       setInvoices(invoices.filter(i => i.id !== id)); 
-      clearFinancialCache();
     }
   };
 
@@ -377,9 +435,12 @@ export default function SalesContractsPage() {
     
     setIsSubmitting(true);
     try {
+      let fileUrl = '';
+      if (newBill.file) {
+        fileUrl = await uploadFileToCloudinary(newBill.file);
+      }
+
       const finalCategory = newBill.category === 'تصنيف مخصص (أكتبه بنفسك)...' ? (newBill.customCategory || 'أخرى') : newBill.category;
-      const fileObj = newBill.file;
-      const fileUrl = fileObj ? URL.createObjectURL(fileObj) : '';
       const billId = `BILL-${Math.floor(100 + Math.random() * 900)}`;
       
       const created = {
@@ -388,16 +449,15 @@ export default function SalesContractsPage() {
         category: finalCategory,
         amount: Number(newBill.amount),
         isTaxable: newBill.isTaxable,
-        fileName: fileObj ? fileObj.name : 'فاتورة_التزام.pdf',
+        fileName: newBill.file ? newBill.file.name : 'فاتورة_التزام.pdf',
         fileUrl,
-        date: new Date().toISOString().split('T')[0],
-        dueDate: newBill.dueDate,
+        date: formatDate(new Date()),
+        dueDate: formatDate(newBill.dueDate),
         status: newBill.status,
         frequency: newBill.frequency
       };
 
       setIncomingBills([created, ...incomingBills]);
-      clearFinancialCache();
 
       await saveIncomingBillToSheet({
         id: created.id,
@@ -408,7 +468,8 @@ export default function SalesContractsPage() {
         status: created.status,
         frequency: created.frequency,
         dueDate: created.dueDate,
-        date: created.date
+        date: created.date,
+        fileUrl
       });
 
       if (newBill.status === 'مسددة') {
@@ -427,7 +488,7 @@ export default function SalesContractsPage() {
 
       setIsBillModalOpen(false);
       setNewBill({ supplier: '', category: 'إيجار المقر', customCategory: '', amount: 0, status: 'مسددة', frequency: 'شهري', isTaxable: true, dueDate: new Date().toISOString().split('T')[0], file: null });
-      alert("تم حفظ فاتورة الالتزام الواردة مع خيار الضريبة ومزامنتها سحابياً بنجاح! 📊☁️");
+      alert("تم حفظ فاتورة الالتزام وترحيلها سحابياً بنجاح! 📊☁️");
     } catch (err) {
       console.error(err);
       alert("حدث خطأ أثناء الحفظ السحابي.");
@@ -439,7 +500,6 @@ export default function SalesContractsPage() {
   const handleDeleteBill = (id: string) => { 
     if (confirm("حذف الفاتورة؟")) {
       setIncomingBills(incomingBills.filter(b => b.id !== id)); 
-      clearFinancialCache();
     }
   };
 
@@ -461,7 +521,7 @@ export default function SalesContractsPage() {
           <title>${item.id} - ${companyInfo.name}</title>
           <style>
             body { font-family: 'Cairo', Tahoma, sans-serif; padding: 40px; color: #1e293b; background: #fff; }
-            .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #0f172a; padding-bottom: 20px; margin-bottom: 30px; }
+            .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #0f172a; padding-bottom: 20px; margin-bottom: 25px; }
             .logo-title { display: flex; align-items: center; gap: 15px; }
             .logo-title img { height: 50px; object-fit: contain; }
             .company-info h2 { margin: 0; color: #0f172a; font-size: 1.3rem; }
@@ -471,9 +531,11 @@ export default function SalesContractsPage() {
             table { width: 100%; border-collapse: collapse; margin-top: 20px; }
             th, td { border: 1px solid #cbd5e1; padding: 12px; text-align: right; font-size: 0.9rem; }
             th { background: #f1f5f9; }
-            .terms-box { margin-top: 25px; background: #fffbeb; border: 1px solid #fde68a; padding: 15px; border-radius: 8px; font-size: 0.85rem; color: #92400e; white-space: pre-line; }
+            .terms-box { margin-top: 20px; background: #fffbeb; border: 1px solid #fde68a; padding: 15px; border-radius: 8px; font-size: 0.85rem; color: #92400e; white-space: pre-line; }
+            .bank-box { margin-top: 20px; background: #f0fdf4; border: 1px solid #bbf7d0; padding: 15px; border-radius: 8px; font-size: 0.85rem; color: #166534; }
+            .bank-box h4 { margin: 0 0 8px 0; color: #15803d; }
             .total-section { margin-top: 20px; text-align: left; font-size: 1.05rem; font-weight: bold; }
-            .footer { margin-top: 40px; text-align: center; font-size: 0.8rem; color: #64748b; border-top: 1px solid #e2e8f0; padding-top: 15px; }
+            .footer { margin-top: 30px; text-align: center; font-size: 0.8rem; color: #64748b; border-top: 1px solid #e2e8f0; padding-top: 15px; }
           </style>
         </head>
         <body>
@@ -489,8 +551,8 @@ export default function SalesContractsPage() {
             <div class="doc-meta">
               <h3 style="margin: 0 0 5px 0; color: #2563eb;">${docType === 'invoice' ? 'فاتورة ضريبية رسمية' : 'عرض سعر'}</h3>
               <strong>رقم المستند:</strong> ${item.id}<br/>
-              <strong>تاريخ الإصدار:</strong> ${item.date}<br/>
-              ${item.dueDate ? `<strong>تاريخ الاستحقاق:</strong> ${item.dueDate}` : ''}
+              <strong>تاريخ الإصدار:</strong> ${formatDate(item.date)}<br/>
+              ${item.dueDate ? `<strong>تاريخ الاستحقاق:</strong> ${formatDate(item.dueDate)}` : ''}
             </div>
           </div>
 
@@ -525,6 +587,15 @@ export default function SalesContractsPage() {
             <p style="color: #2563eb; font-size: 1.2rem;">الإجمالي النهائي شامل الضريبة: ${finalTotal.toLocaleString()} ر.س</p>
           </div>
 
+          ${companyInfo.bankIban ? `
+            <div class="bank-box">
+              <h4>🏦 بيانات التحويل والحساب البنكي المعتمد:</h4>
+              <strong>اسم البنك:</strong> ${companyInfo.bankName || '-'}<br/>
+              <strong>اسم الحساب:</strong> ${companyInfo.bankAccountName || '-'}<br/>
+              <strong>رقم الآيبان (IBAN):</strong> <span style="direction: ltr; display: inline-block; font-weight: bold;">${companyInfo.bankIban}</span>
+            </div>
+          ` : ''}
+
           ${item.terms ? `
             <div class="terms-box">
               <strong>الشروط والأحكام:</strong><br/>
@@ -535,47 +606,6 @@ export default function SalesContractsPage() {
           <div class="footer">
             <p>هذا المستند صادر إلكترونياً من نظام نوركاست الإداري ويعتبر معتمداً رسمياً وفق لوائح وأنظمة المملكة العربية السعودية.</p>
           </div>
-          <script>window.print();</script>
-        </body>
-      </html>
-    `);
-    printWindow.document.close();
-  };
-
-  const handlePrintFreelancerContract = (item: any) => {
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) return;
-    printWindow.document.write(`
-      <html lang="ar" dir="rtl">
-        <head>
-          <title>عقد تقديم خدمات مستقل - ${item.freelancerName}</title>
-          <style>
-            body { font-family: 'Cairo', Tahoma, sans-serif; padding: 40px; color: #1e293b; background: #fff; line-height: 1.8; font-size: 0.95rem; }
-            .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #0f172a; padding-bottom: 15px; margin-bottom: 25px; }
-            .logo-title { display: flex; align-items: center; gap: 12px; }
-            .logo-title img { height: 45px; object-fit: contain; }
-            h1 { text-align: center; font-size: 1.3rem; color: #0f172a; margin: 0 0 5px 0; }
-            .subtitle { text-align: center; font-size: 0.85rem; color: #64748b; margin-bottom: 25px; }
-            .section-title { font-weight: bold; color: #2563eb; margin-top: 18px; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; }
-            p { margin: 6px 0; }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <div class="logo-title">
-              <img src="${noorcastLogoUrl}" alt="Noorcast Logo" />
-              <div><strong>${companyInfo.name}</strong></div>
-            </div>
-            <div style="font-size: 0.85rem; color: #475569;">رقم العقد: ${item.id}</div>
-          </div>
-          <h1>عقد تقديم خدمات (مستقل / فريلانسر)</h1>
-          <div class="subtitle">التاريخ: ${item.date}</div>
-          <p><strong>الطرف الأول:</strong> ${companyInfo.name} (${companyInfo.city})</p>
-          <p><strong>الطرف الثاني:</strong> ${item.freelancerName}</p>
-          <div class="section-title">المادة الأولى: نطاق العمل</div>
-          <p>${item.projectTask}</p>
-          <div class="section-title">المادة الثانية: المقابل المالي والمدة</div>
-          <p>المبلغ: <strong>${Number(item.amount).toLocaleString()} ر.س</strong> | المدة: <strong>${item.duration}</strong></p>
           <script>window.print();</script>
         </body>
       </html>
@@ -599,15 +629,12 @@ export default function SalesContractsPage() {
   };
 
   const filteredQuotes = quotes.filter(q => (q.client || '').toLowerCase().includes(searchTerm.toLowerCase()));
-  const filteredClientContracts = clientContracts.filter(c => (c.party || '').toLowerCase().includes(searchTerm.toLowerCase()));
-  const filteredFreelancers = freelancerContracts.filter(f => (f.freelancerName || '').toLowerCase().includes(searchTerm.toLowerCase()));
   const filteredInvoices = invoices.filter(i => (i.client || '').toLowerCase().includes(searchTerm.toLowerCase()));
   const filteredBills = incomingBills.filter(b => (b.supplier || '').toLowerCase().includes(searchTerm.toLowerCase()));
 
   return (
     <div style={{ padding: '32px', color: 'white', minHeight: '100vh', background: '#0f172a', fontFamily: 'Cairo, sans-serif', boxSizing: 'border-box' }}>
       
-      {/* حقن قواعد الاستجابة الذكية (Media Queries) للعرض المزدوج */}
       <style>{`
         @media (max-width: 900px) {
           .desktop-table-view { display: none !important; }
@@ -621,20 +648,25 @@ export default function SalesContractsPage() {
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px', flexWrap: 'wrap', gap: '15px' }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: '1.85rem', fontWeight: 'bold' }}>العقود والاتفاقيات والمستندات الرسمية</h1>
+          <h1 style={{ margin: 0, fontSize: '1.85rem', fontWeight: 'bold' }}>إدارة الفواتير وعروض الأسعار</h1>
           <p style={{ color: '#94a3b8', fontSize: '0.95rem', margin: '6px 0 0 0' }}>
-            إدارة عروض الأسعار، الأرشيف القانوني، الفواتير الضريبية (صادر)، وفواتير الالتزامات والمصروفات (وارد)
+            إدارة عروض الأسعار، الفواتير الضريبية (صادر)، وفواتير الالتزامات والمصروفات (وارد)
           </p>
         </div>
 
-        <button onClick={() => setIsEditingProfile(!isEditingProfile)} style={secondaryBtn}>
-          <FiSettings /> {isEditingProfile ? 'إغلاق إعدادات الشركة' : 'إعدادات بيانات الشركة والسجل التجاري ⚙️'}
-        </button>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button onClick={loadCloudDocuments} style={secondaryBtn} disabled={loadingCloud}>
+            <FiRefreshCw /> {loadingCloud ? 'جاري المزامنة...' : 'مزامنة المستندات سحابياً 🔄'}
+          </button>
+          <button onClick={() => setIsEditingProfile(!isEditingProfile)} style={secondaryBtn}>
+            <FiSettings /> {isEditingProfile ? 'إغلاق إعدادات الشركة' : 'إعدادات الشركة والبنوك ⚙️'}
+          </button>
+        </div>
       </div>
 
       {isEditingProfile && (
         <div style={{ background: '#1e293b', padding: '24px', borderRadius: '14px', border: '1px solid #3b82f6', marginBottom: '25px', boxSizing: 'border-box' }}>
-          <h3 style={{ marginTop: 0, color: '#38bdf8', fontSize: '1.1rem' }}>⚙️ إعدادات بيانات المنشأة</h3>
+          <h3 style={{ marginTop: 0, color: '#38bdf8', fontSize: '1.1rem' }}>⚙️ إعدادات بيانات المنشأة والحسابات البنكية</h3>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '15px', boxSizing: 'border-box' }}>
             <div>
               <label style={labelStyle}>اسم المنشأة التجاري:</label>
@@ -652,9 +684,21 @@ export default function SalesContractsPage() {
               <label style={labelStyle}>المدينة:</label>
               <input style={inputStyleWithPlaceholder} placeholder="مثل: الرياض" value={companyInfo.city} onChange={e => setCompanyInfo({...companyInfo, city: e.target.value})} />
             </div>
+            <div>
+              <label style={labelStyle}>اسم البنك:</label>
+              <input style={inputStyleWithPlaceholder} placeholder="مثل: مصرف الراجحي" value={companyInfo.bankName || ''} onChange={e => setCompanyInfo({...companyInfo, bankName: e.target.value})} />
+            </div>
+            <div>
+              <label style={labelStyle}>اسم الحساب البنكي:</label>
+              <input style={inputStyleWithPlaceholder} placeholder="مثل: شركة نوركاست" value={companyInfo.bankAccountName || ''} onChange={e => setCompanyInfo({...companyInfo, bankAccountName: e.target.value})} />
+            </div>
+            <div style={{ gridColumn: 'span 2' }}>
+              <label style={labelStyle}>رقم الآيبان (IBAN):</label>
+              <input style={inputStyleWithPlaceholder} placeholder="مثل: SA0380000000108010000003" value={companyInfo.bankIban || ''} onChange={e => setCompanyInfo({...companyInfo, bankIban: e.target.value})} />
+            </div>
           </div>
           <div style={{ marginTop: '15px', textAlign: 'left' }}>
-            <button onClick={() => { setIsEditingProfile(false); alert("تم حفظ البيانات! ✅"); }} style={primaryBtn}>حفظ الإعدادات 💾</button>
+            <button onClick={() => { setIsEditingProfile(false); alert("تم حفظ إعدادات المنشأة والبنوك بنجاح! ✅"); }} style={primaryBtn}>حفظ الإعدادات 💾</button>
           </div>
         </div>
       )}
@@ -667,11 +711,9 @@ export default function SalesContractsPage() {
 
         <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
           {activeTab === 'quotes' && <button onClick={() => { setEditingQuoteId(null); setIsQuoteModalOpen(true); }} style={primaryBtn}><FiPlus /> إنشاء عرض سعر ➕</button>}
-          {activeTab === 'clients_contracts' && <button onClick={() => setIsClientContractModalOpen(true)} style={primaryBtn}><FiPlus /> رفع عقد PDF 📥</button>}
-          {activeTab === 'freelancer_contracts' && <button onClick={() => setIsFreelancerModalOpen(true)} style={primaryBtn}><FiPlus /> عقد فريلانسر 📄</button>}
           {activeTab === 'invoices' && <button onClick={() => setIsInvoiceModalOpen(true)} style={primaryBtn}><FiPlus /> إصدار فاتورة ضريبية 💰</button>}
           {activeTab === 'incoming_bills' && <button onClick={() => setIsBillModalOpen(true)} style={primaryBtn}><FiPlus /> إضافة فاتورة التزام (وارد) 🧾</button>}
-          <button onClick={() => exportToCSV(activeTab === 'quotes' ? quotes : activeTab === 'clients_contracts' ? clientContracts : activeTab === 'freelancer_contracts' ? freelancerContracts : activeTab === 'invoices' ? invoices : incomingBills, 'Report')} style={secondaryBtn}>
+          <button onClick={() => exportToCSV(activeTab === 'quotes' ? quotes : activeTab === 'invoices' ? invoices : incomingBills, 'Report')} style={secondaryBtn}>
             <FiDownload /> تحميل (CSV) 📊
           </button>
         </div>
@@ -679,10 +721,8 @@ export default function SalesContractsPage() {
 
       <div style={{ display: 'flex', gap: '10px', marginBottom: '25px', borderBottom: '1px solid #334155', paddingBottom: '12px', flexWrap: 'wrap' }}>
         <button onClick={() => setActiveTab('quotes')} style={activeTab === 'quotes' ? activeTabBtn : tabBtn}><FiFileText /> عروض الأسعار</button>
-        <button onClick={() => setActiveTab('clients_contracts')} style={activeTab === 'clients_contracts' ? activeTabBtn : tabBtn}><FiBriefcase /> أرشيف العقود (PDF)</button>
-        <button onClick={() => setActiveTab('freelancer_contracts')} style={activeTab === 'freelancer_contracts' ? activeTabBtn : tabBtn}><FiUserCheck /> عقود المستقلين</button>
-        <button onClick={() => setActiveTab('invoices')} style={activeTab === 'invoices' ? activeTabBtn : tabBtn}><FiDollarSign /> الفواتير الضريبية (صادر / ايرادات)</button>
-        <button onClick={() => setActiveTab('incoming_bills')} style={activeTab === 'incoming_bills' ? activeTabBtn : tabBtn}><FiCreditCard /> فواتير الالتزامات (وارد / مصروفات)</button>
+        <button onClick={() => setActiveTab('invoices')} style={activeTab === 'invoices' ? activeTabBtn : tabBtn}><FiDollarSign /> الفواتير الضريبية (صادر)</button>
+        <button onClick={() => setActiveTab('incoming_bills')} style={activeTab === 'incoming_bills' ? activeTabBtn : tabBtn}><FiCreditCard /> فواتير الالتزامات (وارد)</button>
       </div>
 
       {isQuoteModalOpen && (
@@ -700,53 +740,8 @@ export default function SalesContractsPage() {
             <label style={labelStyle}>الشروط:</label>
             <textarea rows={3} style={inputStyle} value={newQuote.terms} onChange={e => setNewQuote({...newQuote, terms: e.target.value})} />
             <div style={{ display: 'flex', gap: '10px', marginTop: '15px', justifyContent: 'flex-end' }}>
-              <button type="submit" style={primaryBtn} disabled={isSubmitting}>{isSubmitting ? 'جاري الحفظ...' : 'حفظ ✅'}</button>
+              <button type="submit" style={primaryBtn} disabled={isSubmitting}>{isSubmitting ? 'جاري الحفظ...' : 'حفظ سحابياً ✅'}</button>
               <button type="button" onClick={() => setIsQuoteModalOpen(false)} style={cancelBtn} disabled={isSubmitting}>إلغاء ❌</button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {isClientContractModalOpen && (
-        <div style={modalOverlay}>
-          <form onSubmit={handleUploadClientContract} style={modalContent}>
-            <h3 style={{ marginTop: 0, color: '#1e293b', fontWeight: 'bold' }}>📁 رفع عقد PDF جديد</h3>
-            <label style={labelStyle}>عنوان العقد:</label>
-            <input style={inputStyle} value={newClientContract.title} onChange={e => setNewClientContract({...newClientContract, title: e.target.value})} required />
-            <label style={labelStyle}>الطرف الثاني:</label>
-            <input style={inputStyle} value={newClientContract.party} onChange={e => setNewClientContract({...newClientContract, party: e.target.value})} required />
-            <label style={labelStyle}>التصنيف:</label>
-            <select style={inputStyle} value={newClientContract.type} onChange={e => setNewClientContract({...newClientContract, type: e.target.value})}>
-              <option value="عميل">عميل</option>
-              <option value="موظف">موظف</option>
-            </select>
-            <label style={labelStyle}>القيمة:</label>
-            <input style={inputStyle} value={newClientContract.value} onChange={e => setNewClientContract({...newClientContract, value: e.target.value})} />
-            <label style={labelStyle}>ملف العقد (PDF):</label>
-            <input type="file" accept=".pdf" style={{ marginBottom: '15px' }} onChange={(e: any) => setNewClientContract({...newClientContract, file: e.target.files[0]})} required />
-            <div style={{ display: 'flex', gap: '10px', marginTop: '15px', justifyContent: 'flex-end' }}>
-              <button type="submit" style={primaryBtn} disabled={isSubmitting}>{isSubmitting ? 'جاري الرفع...' : 'رفع 📥'}</button>
-              <button type="button" onClick={() => setIsClientContractModalOpen(false)} style={cancelBtn} disabled={isSubmitting}>إلغاء ❌</button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {isFreelancerModalOpen && (
-        <div style={modalOverlay}>
-          <form onSubmit={handleSaveFreelancer} style={modalContent}>
-            <h3 style={{ marginTop: 0, color: '#1e293b', fontWeight: 'bold' }}>📄 عقد فريلانسر</h3>
-            <label style={labelStyle}>اسم المستقل:</label>
-            <input style={inputStyle} value={newFreelancer.freelancerName} onChange={e => setNewFreelancer({...newFreelancer, freelancerName: e.target.value})} required />
-            <label style={labelStyle}>المهمة:</label>
-            <input style={inputStyle} value={newFreelancer.projectTask} onChange={e => setNewFreelancer({...newFreelancer, projectTask: e.target.value})} required />
-            <label style={labelStyle}>المبلغ (ر.س):</label>
-            <input type="number" style={inputStyle} value={newFreelancer.amount} onChange={e => setNewFreelancer({...newFreelancer, amount: Number(e.target.value)})} required />
-            <label style={labelStyle}>المدة:</label>
-            <input style={inputStyle} value={newFreelancer.duration} onChange={e => setNewFreelancer({...newFreelancer, duration: e.target.value})} required />
-            <div style={{ display: 'flex', gap: '10px', marginTop: '15px', justifyContent: 'flex-end' }}>
-              <button type="submit" style={primaryBtn} disabled={isSubmitting}>{isSubmitting ? 'جاري الإصدار...' : 'إصدار ✅'}</button>
-              <button type="button" onClick={() => setIsFreelancerModalOpen(false)} style={cancelBtn} disabled={isSubmitting}>إلغاء ❌</button>
             </div>
           </form>
         </div>
@@ -768,10 +763,10 @@ export default function SalesContractsPage() {
             <input type="date" style={inputStyle} value={newInvoice.dueDate} onChange={e => setNewInvoice({...newInvoice, dueDate: e.target.value})} required />
             <label style={labelStyle}>حالة الفاتورة الابتدائي:</label>
             <select style={inputStyle} value={newInvoice.status} onChange={e => setNewInvoice({...newInvoice, status: e.target.value})}>
-              <option value="مسودة">مسودة (0% - لا تُحسب)</option>
-              <option value="تم الإرسال">تم الإرسال (0% - غير مسددة)</option>
-              <option value="تم سداد المقدم">تم سداد المقدم (50% تحصيل تلقائي)</option>
-              <option value="تم سداد الفاتورة كاملة">تم سداد الفاتورة كاملة (100% تحصيل)</option>
+              <option value="مسودة">مسودة</option>
+              <option value="تم الإرسال">تم الإرسال</option>
+              <option value="تم سداد المقدم">تم سداد المقدم (50%)</option>
+              <option value="تم سداد الفاتورة كاملة">تم سداد الفاتورة كاملة (100%)</option>
             </select>
             
             <label style={labelStyle}>إرفاق ملف الفاتورة / إيصال السداد (PDF):</label>
@@ -851,12 +846,11 @@ export default function SalesContractsPage() {
         
         {activeTab === 'quotes' && (
           <div>
-            {/* 1. عرض الشاشات الكبيرة واللابتوب */}
             <div className="desktop-table-view" style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', color: 'white', fontSize: '0.9rem', minWidth: '700px' }}>
                 <thead>
                   <tr style={{ background: '#0f172a', borderBottom: '1px solid #334155', color: '#94a3b8' }}>
-                    {['رقم العرض', 'العميل', 'نطاق الخدمة', 'المبلغ غير شامل', 'الضريبة (15%)', 'الإجمالي', 'الإجراءات'].map(h => <th key={h} style={thStyle}>{h}</th>)}
+                    {['رقم العرض', 'العميل', 'نطاق الخدمة', 'المبلغ غير شامل', 'الضريبة (15%)', 'الإجمالي', 'تاريخ الإصدار', 'الإجراءات'].map(h => <th key={h} style={thStyle}>{h}</th>)}
                   </tr>
                 </thead>
                 <tbody>
@@ -868,6 +862,7 @@ export default function SalesContractsPage() {
                       <td style={{ ...tdStyle, whiteSpace: 'nowrap' }}>{Number(q.amount).toLocaleString()} ر.س</td>
                       <td style={{ ...tdStyle, color: '#f59e0b', whiteSpace: 'nowrap' }}>{Number(q.vat).toLocaleString()} ر.س</td>
                       <td style={{ ...tdStyle, color: '#4ade80', fontWeight: 'bold', whiteSpace: 'nowrap' }}>{Number(q.total).toLocaleString()} ر.س</td>
+                      <td style={{ ...tdStyle, color: '#cbd5e1', whiteSpace: 'nowrap' }}>{formatDate(q.date)}</td>
                       <td style={{ ...tdStyle, whiteSpace: 'nowrap' }}>
                         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                           <button onClick={() => handlePrintDocument(q, 'quote')} style={actionBtn} title="طباعة">طباعة</button>
@@ -881,7 +876,6 @@ export default function SalesContractsPage() {
               </table>
             </div>
 
-            {/* 2. عرض الجوال */}
             <div className="mobile-cards-view" style={{ display: 'none', flexDirection: 'column', gap: '14px' }}>
               {filteredQuotes.map((q: any, idx: number) => (
                 <div key={idx} style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '14px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px', color: 'white' }}>
@@ -890,107 +884,11 @@ export default function SalesContractsPage() {
                     <span style={{ color: '#4ade80', fontWeight: 'bold' }}>{Number(q.total).toLocaleString()} ر.س</span>
                   </div>
                   <div style={{ fontWeight: 'bold', fontSize: '1.05rem', color: '#f8fafc' }}>{q.client}</div>
-                  <div style={{ fontSize: '0.85rem', color: '#cbd5e1' }}>{q.serviceType}</div>
+                  <div style={{ fontSize: '0.85rem', color: '#cbd5e1' }}>{q.serviceType} (التاريخ: {formatDate(q.date)})</div>
                   <div style={{ display: 'flex', gap: '8px', marginTop: '6px', borderTop: '1px solid #334155', paddingTop: '10px' }}>
                     <button onClick={() => handlePrintDocument(q, 'quote')} style={{ ...actionBtn, flex: 1, padding: '8px' }}>طباعة</button>
                     <button onClick={() => handleEditQuote(q)} style={{ ...iconEditBtn, flex: 1, padding: '8px' }}>تعديل</button>
                     <button onClick={() => handleDeleteQuote(q.id)} style={{ ...iconDeleteBtn, flex: 1, padding: '8px' }}>حذف</button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'clients_contracts' && (
-          <div>
-            <div className="desktop-table-view" style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', color: 'white', fontSize: '0.9rem', minWidth: '700px' }}>
-                <thead>
-                  <tr style={{ background: '#0f172a', borderBottom: '1px solid #334155', color: '#94a3b8' }}>
-                    {['رقم العقد', 'عنوان العقد', 'الطرف الثاني', 'التصنيف', 'الملف', 'الإجراءات'].map(h => <th key={h} style={thStyle}>{h}</th>)}
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredClientContracts.map((c: any, idx: number) => (
-                    <tr key={idx} style={{ borderBottom: '1px solid #334155', background: idx % 2 === 0 ? '#1e293b' : '#1a2638' }}>
-                      <td style={{ ...tdStyle, color: '#38bdf8', fontWeight: 'bold', whiteSpace: 'nowrap' }}>{c.id}</td>
-                      <td style={{ ...tdStyle, fontWeight: 'bold' }}>{c.title}</td>
-                      <td style={tdStyle}>{c.party}</td>
-                      <td style={{ ...tdStyle, whiteSpace: 'nowrap' }}><span style={{ padding: '4px 8px', borderRadius: '6px', background: c.type === 'عميل' ? '#1e40af' : '#6b21a8', color: 'white', fontSize: '0.75rem' }}>{c.type}</span></td>
-                      <td style={{ ...tdStyle, color: '#94a3b8', whiteSpace: 'nowrap' }}>{c.fileName}</td>
-                      <td style={{ ...tdStyle, whiteSpace: 'nowrap' }}>
-                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                          <button onClick={() => handleViewOrPrintPDF(c)} style={actionBtn}>معاينة PDF</button>
-                          <button onClick={() => handleDeleteClientContract(c.id)} style={iconDeleteBtn} title="حذف"><FiTrash2 /></button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="mobile-cards-view" style={{ display: 'none', flexDirection: 'column', gap: '14px' }}>
-              {filteredClientContracts.map((c: any, idx: number) => (
-                <div key={idx} style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '14px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px', color: 'white' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ color: '#38bdf8', fontWeight: 'bold' }}>{c.id}</span>
-                    <span style={{ padding: '3px 8px', borderRadius: '6px', background: c.type === 'عميل' ? '#1e40af' : '#6b21a8', color: 'white', fontSize: '0.75rem' }}>{c.type}</span>
-                  </div>
-                  <div style={{ fontWeight: 'bold', fontSize: '1.05rem', color: '#f8fafc' }}>{c.title}</div>
-                  <div style={{ fontSize: '0.85rem', color: '#cbd5e1' }}>الطرف الثاني: {c.party}</div>
-                  <div style={{ display: 'flex', gap: '8px', marginTop: '6px', borderTop: '1px solid #334155', paddingTop: '10px' }}>
-                    <button onClick={() => handleViewOrPrintPDF(c)} style={{ ...actionBtn, flex: 1, padding: '8px' }}>معاينة PDF</button>
-                    <button onClick={() => handleDeleteClientContract(c.id)} style={{ ...iconDeleteBtn, flex: 1, padding: '8px' }}>حذف</button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'freelancer_contracts' && (
-          <div>
-            <div className="desktop-table-view" style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', color: 'white', fontSize: '0.9rem', minWidth: '700px' }}>
-                <thead>
-                  <tr style={{ background: '#0f172a', borderBottom: '1px solid #334155', color: '#94a3b8' }}>
-                    {['رقم العقد', 'اسم المستقل', 'المهمة', 'المبلغ', 'المدة', 'الإجراءات'].map(h => <th key={h} style={thStyle}>{h}</th>)}
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredFreelancers.map((f: any, idx: number) => (
-                    <tr key={idx} style={{ borderBottom: '1px solid #334155', background: idx % 2 === 0 ? '#1e293b' : '#1a2638' }}>
-                      <td style={{ ...tdStyle, color: '#38bdf8', fontWeight: 'bold', whiteSpace: 'nowrap' }}>{f.id}</td>
-                      <td style={{ ...tdStyle, fontWeight: 'bold', whiteSpace: 'nowrap' }}>{f.freelancerName}</td>
-                      <td style={tdStyle}>{f.projectTask}</td>
-                      <td style={{ ...tdStyle, color: '#4ade80', whiteSpace: 'nowrap' }}>{Number(f.amount).toLocaleString()} ر.س</td>
-                      <td style={{ ...tdStyle, whiteSpace: 'nowrap' }}>{f.duration}</td>
-                      <td style={{ ...tdStyle, whiteSpace: 'nowrap' }}>
-                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                          <button onClick={() => handlePrintFreelancerContract(f)} style={actionBtn}>طباعة</button>
-                          <button onClick={() => handleDeleteFreelancer(f.id)} style={iconDeleteBtn} title="حذف"><FiTrash2 /></button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="mobile-cards-view" style={{ display: 'none', flexDirection: 'column', gap: '14px' }}>
-              {filteredFreelancers.map((f: any, idx: number) => (
-                <div key={idx} style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '14px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px', color: 'white' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ color: '#38bdf8', fontWeight: 'bold' }}>{f.id}</span>
-                    <span style={{ color: '#4ade80', fontWeight: 'bold' }}>{Number(f.amount).toLocaleString()} ر.س</span>
-                  </div>
-                  <div style={{ fontWeight: 'bold', fontSize: '1.05rem', color: '#f8fafc' }}>{f.freelancerName}</div>
-                  <div style={{ fontSize: '0.85rem', color: '#cbd5e1' }}>{f.projectTask} (المدة: {f.duration})</div>
-                  <div style={{ display: 'flex', gap: '8px', marginTop: '6px', borderTop: '1px solid #334155', paddingTop: '10px' }}>
-                    <button onClick={() => handlePrintFreelancerContract(f)} style={{ ...actionBtn, flex: 1, padding: '8px' }}>طباعة</button>
-                    <button onClick={() => handleDeleteFreelancer(f.id)} style={{ ...iconDeleteBtn, flex: 1, padding: '8px' }}>حذف</button>
                   </div>
                 </div>
               ))}
@@ -1014,7 +912,7 @@ export default function SalesContractsPage() {
                       <td style={{ ...tdStyle, fontWeight: 'bold' }}>{inv.client}</td>
                       <td style={{ ...tdStyle, whiteSpace: 'nowrap' }}>{Number(inv.amount || 0).toLocaleString()} ر.س</td>
                       <td style={{ ...tdStyle, color: '#4ade80', fontWeight: 'bold', whiteSpace: 'nowrap' }}>{Number(inv.total || (inv.amount * 1.15)).toLocaleString()} ر.س</td>
-                      <td style={{ ...tdStyle, color: '#f59e0b', fontSize: '0.85rem', whiteSpace: 'nowrap' }}>{inv.dueDate || '-'}</td>
+                      <td style={{ ...tdStyle, color: '#f59e0b', fontSize: '0.85rem', whiteSpace: 'nowrap' }}>{formatDate(inv.dueDate)}</td>
                       <td style={{ ...tdStyle, whiteSpace: 'nowrap' }}>
                         <select 
                           value={inv.status} 
@@ -1031,15 +929,12 @@ export default function SalesContractsPage() {
                       <td style={{ ...tdStyle, whiteSpace: 'nowrap' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                           {inv.fileUrl ? (
-                            <>
-                              <button onClick={() => handleViewOrPrintPDF(inv)} style={actionBtn}>عرض 📄</button>
-                              <button onClick={() => handleRemoveInvoiceFile(inv.id)} style={{ background: '#ef4444', color: 'white', border: 'none', borderRadius: '4px', width: '24px', height: '24px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem' }} title="إزالة الملف">❌</button>
-                            </>
+                            <button onClick={() => handleViewOrPrintPDF(inv)} style={actionBtn}>عرض 📄</button>
                           ) : (
                             <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>بدون ملف</span>
                           )}
                           <label style={{ cursor: 'pointer', background: '#334155', color: '#38bdf8', padding: '6px 10px', borderRadius: '6px', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem', border: '1px solid #475569' }} title="رفع ملف PDF">
-                            <FiUpload /> رفع
+                            <FiUpload /> رفع سحابي
                             <input type="file" accept=".pdf" style={{ display: 'none' }} onChange={(e: any) => { if(e.target.files[0]) handleUploadInvoiceFile(inv.id, e.target.files[0]); }} />
                           </label>
                         </div>
@@ -1064,7 +959,7 @@ export default function SalesContractsPage() {
                     <span style={{ color: '#4ade80', fontWeight: 'bold' }}>{Number(inv.total || (inv.amount * 1.15)).toLocaleString()} ر.س</span>
                   </div>
                   <div style={{ fontWeight: 'bold', fontSize: '1.05rem', color: '#f8fafc' }}>{inv.client}</div>
-                  <div style={{ fontSize: '0.85rem', color: '#cbd5e1' }}>{inv.serviceType} (الاستحقاق: {inv.dueDate || '-'})</div>
+                  <div style={{ fontSize: '0.85rem', color: '#cbd5e1' }}>{inv.serviceType} (الاستحقاق: {formatDate(inv.dueDate)})</div>
                   
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #334155', paddingTop: '8px' }}>
                     <select 
@@ -1108,7 +1003,7 @@ export default function SalesContractsPage() {
                         <td style={{ ...tdStyle, whiteSpace: 'nowrap' }}><span style={{ padding: '4px 8px', borderRadius: '6px', background: '#b45309', color: 'white', fontSize: '0.75rem' }}>{b.category}</span></td>
                         <td style={{ ...tdStyle, color: '#ef4444', fontWeight: 'bold', whiteSpace: 'nowrap' }}>{Number(b.amount).toLocaleString()} ر.س</td>
                         <td style={{ ...tdStyle, color: '#38bdf8', fontSize: '0.85rem', fontWeight: 'bold', whiteSpace: 'nowrap' }}>{b.frequency || 'شهري'}</td>
-                        <td style={{ ...tdStyle, color: '#f59e0b', fontSize: '0.85rem', whiteSpace: 'nowrap' }}>{b.dueDate || '-'}</td>
+                        <td style={{ ...tdStyle, color: '#f59e0b', fontSize: '0.85rem', whiteSpace: 'nowrap' }}>{formatDate(b.dueDate)}</td>
                         <td style={{ ...tdStyle, whiteSpace: 'nowrap' }}>
                           <select 
                             value={b.status} 
@@ -1123,15 +1018,12 @@ export default function SalesContractsPage() {
                         <td style={{ ...tdStyle, whiteSpace: 'nowrap' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                             {b.fileUrl ? (
-                              <>
-                                <button onClick={() => handleViewOrPrintPDF(b)} style={actionBtn}>عرض 📄</button>
-                                <button onClick={() => handleRemoveBillFile(b.id)} style={{ background: '#ef4444', color: 'white', border: 'none', borderRadius: '4px', width: '24px', height: '24px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem' }} title="إزالة الملف">❌</button>
-                              </>
+                              <button onClick={() => handleViewOrPrintPDF(b)} style={actionBtn}>عرض 📄</button>
                             ) : (
                               <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>بدون ملف</span>
                             )}
                             <label style={{ cursor: 'pointer', background: '#334155', color: '#38bdf8', padding: '6px 10px', borderRadius: '6px', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem', border: '1px solid #475569' }} title="رفع ملف PDF">
-                              <FiUpload /> رفع
+                              <FiUpload /> رفع سحابي
                               <input type="file" accept=".pdf" style={{ display: 'none' }} onChange={(e: any) => { if(e.target.files[0]) handleUploadBillFile(b.id, e.target.files[0]); }} />
                             </label>
                           </div>
@@ -1160,7 +1052,7 @@ export default function SalesContractsPage() {
                       <span style={{ color: '#ef4444', fontWeight: 'bold' }}>{Number(b.amount).toLocaleString()} ر.س</span>
                     </div>
                     <div style={{ fontWeight: 'bold', fontSize: '1.05rem', color: '#f8fafc' }}>{b.supplier}</div>
-                    <div style={{ fontSize: '0.85rem', color: '#cbd5e1' }}>التصنيف: {b.category} (الاستحقاق: {b.dueDate || '-'})</div>
+                    <div style={{ fontSize: '0.85rem', color: '#cbd5e1' }}>التصنيف: {b.category} (الاستحقاق: {formatDate(b.dueDate)})</div>
 
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #334155', paddingTop: '8px' }}>
                       <select 

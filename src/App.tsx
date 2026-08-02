@@ -6,9 +6,10 @@ import { LoginPage } from '@/pages/auth/LoginPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 import { DashboardPage } from '@/pages/dashboard/DashboardPage';
 
-// المبيعات
+// المبيعات والفواتير والأرشيف القانوني
 import QuotesPage from './pages/sales/QuotesPage';
 import SalesContractsPage from './pages/sales/SalesContractsPage';
+import ContractsArchivePage from './pages/sales/ContractsArchivePage'; // صفحة العقود والأرشيف الجديدة
 // التسويق
 import MarketingPage from './pages/marketing/MarketingPage';
 // المالية
@@ -24,7 +25,7 @@ import InvestorsPage from './pages/finance/InvestorsPage';
 import ProjectsPage from './pages/projects/ProjectsPage';
 import TaskManager from './pages/projects/TaskManager';
 import CalendarPage from './pages/projects/CalendarPage';
-import FreelancerArchive from './pages/projects/FreelancerArchive'; // أرشيف المستقلين والمزودين التشغيلي
+import FreelancerArchive from './pages/projects/FreelancerArchive';
 // الموارد البشرية
 import HRPage from './pages/hr/HRPage';
 import HRPayroll from './pages/hr/HRPayroll';
@@ -47,6 +48,7 @@ export default function App() {
               <Route path="/" element={<DashboardPage />} />
               <Route path="/sales/quotes" element={<QuotesPage />} />
               <Route path="/sales/contracts" element={<SalesContractsPage />} />
+              <Route path="/sales/archive" element={<ContractsArchivePage />} /> {/* ربط مسار الأرشيف بصفحته الخاصة */}
               <Route path="/crm/leads" element={<LeadsPage />} />
               <Route path="/crm/active" element={<ActiveClientsPage />} />
               <Route path="/crm/clients" element={<ClientsPage />} />
@@ -78,7 +80,7 @@ export default function App() {
               <Route path="/hr/admin-control" element={<HRAdminControlPage />} />
             </Route>
           </Route>
-          <Route path="*" element={<NotFoundPage />} />
+          <Route path="*" elementNotFound element={<NotFoundPage />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { logout } from '@/firebase/auth';
 import { useAuth } from '@/hooks/useAuth';
 import { ar } from '@/i18n/ar';
-import { getHRPayrollSheet } from '@/services/dbService';
+import { getHRPayrollSheet, requestNotificationPermission } from '@/services/dbService';
+import { FiBell } from 'react-icons/fi';
 
 export function Header({ userIdentifier }: { userIdentifier?: string; onToggleSidebar?: () => void }) {
   const { employee } = useAuth();
@@ -60,6 +61,21 @@ export function Header({ userIdentifier }: { userIdentifier?: string; onToggleSi
     navigate('/login');
   }
 
+  // تفعيل إشعارات الجوال
+  const handleEnablePushNotifications = async () => {
+    try {
+      const token = await requestNotificationPermission();
+      if (token) {
+        alert("تم تفعيل إشعارات الجوال والداشبورد بنجاح! 🔔🚀\nستصلك التنبيهات الفورية للطلبات والمهام الجديدة.");
+      } else {
+        alert("يرجى السماح للإشعارات من إعدادات المتصفح.");
+      }
+    } catch (error) {
+      console.error(error);
+      alert("حدث خطأ أثناء محاولة تفعيل الإشعارات.");
+    }
+  };
+
   // دالة إطلاق حدث فتح السايد بار
   const handleMenuClick = () => {
     window.dispatchEvent(new CustomEvent('toggle-sidebar'));
@@ -91,8 +107,8 @@ export function Header({ userIdentifier }: { userIdentifier?: string; onToggleSi
             overflow: hidden !important;
             text-overflow: ellipsis !important;
           }
-          .header-logout-btn {
-            padding: 5px 10px !important;
+          .header-logout-btn, .header-notif-btn {
+            padding: 5px 8px !important;
             font-size: 0.72rem !important;
           }
         }
@@ -100,9 +116,8 @@ export function Header({ userIdentifier }: { userIdentifier?: string; onToggleSi
 
       <header className="header header-container" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', padding: '0 24px', background: '#1e293b', borderBottom: '1px solid #334155', height: '70px', boxSizing: 'border-box' }}>
         
-        {/* القسم الأيمن: زر القائمة (الخطوط الثلاثة المرسومة) + اللوغو */}
+        {/* القسم الأيمن: زر القائمة (الخطوط الثلاثة) + اللوغو */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          {/* أيقونة الخطوط الثلاثة مدمجة تماماً دون أي مربعات محيطية */}
           <button 
             type="button"
             onClick={handleMenuClick}
@@ -141,10 +156,27 @@ export function Header({ userIdentifier }: { userIdentifier?: string; onToggleSi
           )}
         </div>
 
-        {/* زر تسجيل الخروج */}
-        <button type="button" className="btn btn-ghost header-logout-btn" onClick={handleLogout} style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)', padding: '6px 14px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>
-          {ar.auth?.logout || 'تسجيل الخروج'}
-        </button>
+        {/* القسم الأيسر: زر تفعيل الإشعارات + زر تسجيل الخروج */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <button 
+            type="button" 
+            className="header-notif-btn" 
+            onClick={handleEnablePushNotifications} 
+            title="تفعيل تنبيهات الجوال والداشبورد"
+            style={{ background: 'rgba(37, 99, 235, 0.15)', color: '#38bdf8', border: '1px solid rgba(56, 189, 248, 0.3)', padding: '6px 12px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem' }}
+          >
+            <FiBell size={15} /> تنبيهات الجوال
+          </button>
+
+          <button 
+            type="button" 
+            className="btn btn-ghost header-logout-btn" 
+            onClick={handleLogout} 
+            style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)', padding: '6px 14px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}
+          >
+            {ar.auth?.logout || 'تسجيل الخروج'}
+          </button>
+        </div>
       </header>
     </>
   );
