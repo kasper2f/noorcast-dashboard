@@ -17,6 +17,7 @@ export default function LeadsPage() {
   const [selectedClient, setSelectedClient] = useState<any>(null);
   const [pendingStatus, setPendingStatus] = useState<string>('');
   const [noteInput, setNoteInput] = useState<string>('');
+  const [isSubmitting, setIsSubmitting] = useState(false); // ⏳ حالة الإرسال والانتظار لمنع التكرار
 
   // استخراج اسم المستخدم (Username) الحقيقي للموظف المسجل دخول حالياً
   const getCurrentUsername = () => {
@@ -83,9 +84,10 @@ export default function LeadsPage() {
 
   const handleConfirmUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedClient) return;
+    if (!selectedClient || isSubmitting) return;
 
     try {
+      setIsSubmitting(true); // تفعيل مؤشر الانتظار وتعطل الأزرار فوراً لمنع التكرار
       const timestamp = new Date().toLocaleString('ar-SA');
       const formattedNote = `[${timestamp}] @${currentEmployee} غير الحالة إلى (${pendingStatus})${noteInput ? `: ${noteInput}` : ''}`;
       
@@ -97,11 +99,13 @@ export default function LeadsPage() {
       
       setIsModalOpen(false);
       setSelectedClient(null);
-      loadClients();
+      await loadClients();
       alert("تم تحديث الحالة وتسجيل الملاحظة بنجاح!");
     } catch (error) {
       console.error("خطأ أثناء تحديث الحالة:", error);
       alert("فشل تحديث الحالة، حاول مرة أخرى.");
+    } finally {
+      setIsSubmitting(false); // إعادة تعيين حالة الانتظار بعد الانتهاء
     }
   };
 
@@ -122,7 +126,7 @@ export default function LeadsPage() {
   return (
     <div style={{ padding: '24px', background: '#0f172a', minHeight: '100vh', color: 'white', fontFamily: 'Cairo, sans-serif', boxSizing: 'border-box' }}>
       
-      {/* حقن قواعد الاستجابة الذكية (Media Queries) مباشرة لتعمل بسلاسة تامة */}
+      {/* حقن قواعد الاستجابة الذكية (Media Queries) */}
       <style>{`
         @media (max-width: 900px) {
           .desktop-table-view { display: none !important; }
@@ -137,7 +141,7 @@ export default function LeadsPage() {
       {/* رأس الصفحة وزر التحديث */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '15px' }}>
         <div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 'bold', margin: 0 }}> العملاء المحتملين</h1>
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 'bold', margin: 0 }}>العملاء المحتملين</h1>
           <p style={{ color: '#94a3b8', fontSize: '0.85rem', margin: '4px 0 0 0' }}>إدارة الطلبات الجديدة ومتابعتها بلحظية</p>
         </div>
         <button onClick={loadClients} style={primaryBtn}>تحديث البيانات 🔄</button>
@@ -174,7 +178,7 @@ export default function LeadsPage() {
         <div style={{ textAlign: 'center', marginTop: '50px', color: '#94a3b8' }}>جاري تحميل البيانات...</div>
       ) : (
         <>
-          {/* 1. عرض الشاشات الكبيرة واللابتوب (Desktop Table View) */}
+          {/* 1. عرض الشاشات الكبيرة واللابتوب */}
           <div className="desktop-table-view" style={{ overflowX: 'auto', background: '#1e293b', borderRadius: '12px', border: '1px solid #334155', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.2)' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', color: 'white', fontSize: '0.9rem', minWidth: '1200px' }}>
               <thead>
@@ -248,7 +252,7 @@ export default function LeadsPage() {
             </table>
           </div>
 
-          {/* 2. عرض الجوال والأجهزة الذكية الصغرى (Mobile Cards View) */}
+          {/* 2. عرض الجوال والأجهزة الذكية الصغرى */}
           <div className="mobile-cards-view" style={{ display: 'none', flexDirection: 'column', gap: '14px' }}>
             {filteredClients.length > 0 ? (
               filteredClients.map(c => {
@@ -303,16 +307,16 @@ export default function LeadsPage() {
         </>
       )}
 
-      {/* نافذة التوثيق عند تغيير الحالة */}
+      {/* نافذة التوثيق عند تغيير الحالة (مع تفعيل اشعار الانتظار والتعطيل) */}
       {isModalOpen && (
         <div style={modalOverlay}>
           <form onSubmit={handleConfirmUpdate} style={modalContent}>
-            <h3 style={{ marginTop: 0, color: '#1e293b' }}> توثيق تغيير الحالة</h3>
+            <h3 style={{ marginTop: 0, color: '#1e293b' }}>توثيق تغيير الحالة</h3>
             <p style={{ fontSize: '0.9rem', color: '#475569' }}>
               أنت على وشك تغيير حالة الطلب إلى: <span style={{ color: '#2563eb', fontWeight: 'bold' }}>{pendingStatus}</span>
             </p>
             
-            <label style={{ display: 'block', stylesheet: 'block', fontSize: '0.85rem', marginBottom: '5px', fontWeight: 'bold', color: '#1e293b' }}>
+            <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '5px', fontWeight: 'bold', color: '#1e293b' }}>
               اكتب تفاصيل التحديث أو الملاحظة للموظف التالي:
             </label>
             <textarea 
@@ -321,12 +325,17 @@ export default function LeadsPage() {
               onChange={(e) => setNoteInput(e.target.value)}
               placeholder="اكتب تفاصيل ما حدث مع العميل هنا..."
               style={textareaStyle}
+              disabled={isSubmitting}
               required
             />
 
             <div style={{ display: 'flex', gap: '10px', marginTop: '15px', justifyContent: 'flex-end' }}>
-              <button type="submit" style={primaryBtn}>حفظ وتحديث ✅</button>
-              <button type="button" onClick={() => setIsModalOpen(false)} style={secondaryBtn}>إلغاء ❌</button>
+              <button type="submit" style={{ ...primaryBtn, opacity: isSubmitting ? 0.7 : 1, cursor: isSubmitting ? 'not-allowed' : 'pointer' }} disabled={isSubmitting}>
+                {isSubmitting ? '⏳ جاري الحفظ والتحديث...' : 'حفظ وتحديث ✅'}
+              </button>
+              <button type="button" onClick={() => setIsModalOpen(false)} style={{ ...secondaryBtn, opacity: isSubmitting ? 0.5 : 1 }} disabled={isSubmitting}>
+                إلغاء ❌
+              </button>
             </div>
           </form>
         </div>

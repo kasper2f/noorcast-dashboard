@@ -80,7 +80,7 @@ export default function App() {
               <Route path="/hr/admin-control" element={<HRAdminControlPage />} />
             </Route>
           </Route>
-          <Route path="*" elementNotFound element={<NotFoundPage />} />
+          <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

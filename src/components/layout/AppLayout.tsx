@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar'; 
 import { Header } from './Header';
+import { ToastNotification } from './ToastNotification';
 
 export function AppLayout() {
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
@@ -41,7 +42,8 @@ export function AppLayout() {
         display: 'flex', 
         flexDirection: 'column', 
         overflowY: 'auto',
-        width: '100%'
+        width: '100%',
+        position: 'relative'
       }}>
         {/* تمرير المعرف للهيدر */}
         <Header userIdentifier={currentIdentifier} />
@@ -55,6 +57,9 @@ export function AppLayout() {
             <Outlet />
           </div>
         </main>
+
+        {/* 🔔 حقن التنبيهات المرئية الحية (Toast Notifications) للتحركات داخل الداشبورد */}
+        <ToastNotification />
       </div>
     </div>
   );

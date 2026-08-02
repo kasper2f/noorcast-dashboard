@@ -159,6 +159,13 @@ export const logDashboardAction = async (action: string, target: string, details
       }
     }
 
+    // 🚀 إطلاق تنبيه مرئي فوري داخل الداشبورد لمكون Toast
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('dashboard-activity', {
+        detail: { action, target, details: `${details} (بواسطة: @${username})` }
+      }));
+    }
+
     await fetch(GOOGLE_SCRIPT_URL, {
       method: 'POST',
       mode: 'no-cors',
@@ -283,7 +290,6 @@ export const getOrders = async () => {
   }
 };
 
-// --- دالة تحديث الطلب مع إرسال إشعار سحابي فوري عند التغيير ---
 export const updateOrderStatus = async (orderId: string, status: string, lastContactedBy?: string, notes?: string) => {
   try {
     const currentUserStr = localStorage.getItem('currentUser') || localStorage.getItem('adminUser') || '{}';
@@ -297,7 +303,6 @@ export const updateOrderStatus = async (orderId: string, status: string, lastCon
       }
     }
 
-    // 1. إرسال التحديث إلى قاعدة البيانات في السحابة
     await fetch(GOOGLE_SCRIPT_URL, {
       method: 'POST',
       mode: 'no-cors',
@@ -314,7 +319,6 @@ export const updateOrderStatus = async (orderId: string, status: string, lastCon
       })
     });
 
-    // 2. تسجيل الحدث في سجل التدقيق السحابي
     await logDashboardAction(
       'UPDATE_ORDER',
       `Order #${orderId}`,
