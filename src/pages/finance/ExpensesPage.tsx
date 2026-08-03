@@ -200,7 +200,7 @@ export default function ExpensesPage() {
     ];
 
     paidInvoicesList.forEach((inv: any) => {
-      reportRows.push([`فاتورة صادرة #${inv.number || inv.id}`, "إيراد", "مبيعات", cleanPrice(inv.financials.effectiveTotal), inv.financials.statusLabel, formatDateClean(inv.dueDate)]);
+      reportRows.push(["فاتورة صادرة", "إيراد", "مبيعات", cleanPrice(inv.financials.effectiveTotal), inv.financials.statusLabel, formatDateClean(inv.dueDate)]);
     });
 
     validExpenses.forEach((e: any) => {
@@ -208,7 +208,9 @@ export default function ExpensesPage() {
     });
 
     filteredIncomingBillsForCalc.forEach((b: any) => {
-      reportRows.push([`فاتورة واردة: ${b.supplier} (${b.category})`, "مصروف", b.category, -cleanPrice(b.amount), b.status, formatDateClean(b.dueDate)]);
+      const isTax = b.isTaxable !== false && b.isTaxable !== 'false' && b.isTaxable !== 'FALSE';
+      const billDesc = isTax ? "فاتورة واردة - خاضعة للضريبة" : "فاتورة واردة - غير خاضعة للضريبة";
+      reportRows.push([billDesc, "مصروف", b.category, -cleanPrice(b.amount), b.status, formatDateClean(b.dueDate)]);
     });
 
     const csvContent = "\uFEFF" + reportRows.map(e => e.join(",")).join("\n");
@@ -256,7 +258,6 @@ export default function ExpensesPage() {
   return (
     <div style={{ padding: '24px', color: 'white', minHeight: '100vh', background: '#0f172a', fontFamily: 'Cairo, sans-serif', boxSizing: 'border-box' }}>
       
-      {/* حقن قواعد الاستجابة الذكية (Media Queries) للعرض المزدوج */}
       <style>{`
         @media (max-width: 900px) {
           .desktop-table-view { display: none !important; }
@@ -285,7 +286,6 @@ export default function ExpensesPage() {
         </div>
       </div>
 
-      {/* شريط الفلتر الضريبي للتحكم الكامل */}
       <div style={{ display: 'flex', gap: '15px', marginTop: '20px', background: '#1e293b', padding: '12px 18px', borderRadius: '12px', border: '1px solid #334155', alignItems: 'center', flexWrap: 'wrap' }}>
         <span style={{ fontSize: '0.9rem', color: '#94a3b8', fontWeight: 'bold' }}>فلتر عرض المصروفات والأرباح للتقارير:</span>
         <button 
@@ -305,7 +305,7 @@ export default function ExpensesPage() {
       <div style={{ display: 'flex', gap: '10px', marginTop: '20px', borderBottom: '1px solid #334155', paddingBottom: '12px', flexWrap: 'wrap' }}>
         <button onClick={() => setActiveTab('main')} style={tabBtnStyle(activeTab === 'main')}> الإيرادات والمصروفات الرئيسية</button>
         <button onClick={() => setActiveTab('fixed')} style={tabBtnStyle(activeTab === 'fixed')}> المصروفات الثابتة والرواتب (مرجعي)</button>
-        <button onClick={() => setActiveTab('investors')} style={tabBtnStyle(activeTab === 'investors')}> المستثمرين ورؤوس الأموال</button>
+        <button onClick={() => setActiveTab('investors')} style={tabBtnStyle(activeTab === 'investors')}> المستثمرين رؤوس الأموال</button>
       </div>
 
       {activeTab === 'main' && (
@@ -342,9 +342,9 @@ export default function ExpensesPage() {
           {activeTab === 'main' && (
             <div style={{ marginTop: '20px' }}>
               
-              {/* 1. عرض الشاشات الكبيرة واللابتوب (Desktop Table View - بلون النظام الداكن) */}
+              {/* 1. جدول اللابتوب */}
               <div className="desktop-table-view" style={{ overflowX: 'auto', background: '#1e293b', padding: '20px', borderRadius: '16px', border: '1px solid #334155', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.2)' }}>
-                <h3 style={{ marginTop: 0, color: 'white', fontSize: '1.1rem' }}>سجل الحركات المالية (بدون تكرار وبحسب الفلتر الضريبي)</h3>
+                <h3 style={{ marginTop: 0, color: 'white', fontSize: '1.1rem' }}>سجل الحركات المالية</h3>
                 <table style={{ width: '100%', borderCollapse: 'collapse', color: 'white', marginTop: '10px', minWidth: '900px' }}>
                   <thead>
                     <tr style={{ borderBottom: '2px solid #334155', background: '#0f172a', color: '#94a3b8' }}>
@@ -354,9 +354,9 @@ export default function ExpensesPage() {
                   <tbody>
                     {paidInvoicesList.map((inv: any, index: number) => (
                       <tr key={`inv-${inv.id}`} style={{ borderBottom: '1px solid #334155', background: index % 2 === 0 ? '#1e293b' : '#1a2638' }}>
-                        <td style={{ ...tdStyle, fontWeight: 'bold' }}>فاتورة صادرة #{inv.number || inv.id}</td>
+                        <td style={{ ...tdStyle, fontWeight: 'bold' }}>فاتورة صادرة</td>
                         <td style={{ ...tdStyle, color: '#4ade80', fontWeight: 'bold' }}>إيراد</td>
-                        <td style={tdStyle}>مبيعات وعملاء</td>
+                        <td style={tdStyle}>مبيعات</td>
                         <td style={{ ...tdStyle, color: '#4ade80', fontWeight: 'bold' }}>+{cleanPrice(inv.financials.effectiveTotal).toLocaleString()} ر.س</td>
                         <td style={tdStyle}>{inv.client}</td>
                         <td style={tdStyle}>{inv.financials.statusLabel}</td>
@@ -366,7 +366,7 @@ export default function ExpensesPage() {
                     {validExpenses.map((e: any, index: number) => (
                       <tr key={`exp-${e.id}`} style={{ borderBottom: '1px solid #334155', background: index % 2 === 0 ? '#1e293b' : '#1a2638' }}>
                         <td style={{ ...tdStyle, fontWeight: 'bold' }}>{e.description}</td>
-                        <td style={{ ...tdStyle, color: '#f87171', fontWeight: 'bold' }}>مصروف يدوي</td>
+                        <td style={{ ...tdStyle, color: '#f87171', fontWeight: 'bold' }}>مصروف</td>
                         <td style={tdStyle}>{e.category}</td>
                         <td style={{ ...tdStyle, color: '#f87171', fontWeight: 'bold' }}>-{cleanPrice(e.amount).toLocaleString()} ر.س</td>
                         <td style={tdStyle}>{e.responsible}</td>
@@ -374,27 +374,31 @@ export default function ExpensesPage() {
                         <td style={{ ...tdStyle, color: '#f59e0b', fontWeight: 'bold' }}>{formatDateClean(e.date)}</td>
                       </tr>
                     ))}
-                    {filteredIncomingBillsForCalc.map((b: any, index: number) => (
-                      <tr key={`bill-${b.id}`} style={{ borderBottom: '1px solid #334155', background: index % 2 === 0 ? '#1e293b' : '#1a2638' }}>
-                        <td style={{ ...tdStyle, fontWeight: 'bold' }}>فاتورة واردة: {b.supplier} ({b.category}) {b.isTaxable === false || b.isTaxable === 'false' ? ' [غير خاضع للضريبة]' : ' [خاضع للضريبة]'}</td>
-                        <td style={{ ...tdStyle, color: '#f87171', fontWeight: 'bold' }}>مصروف وارد</td>
-                        <td style={tdStyle}>{b.category}</td>
-                        <td style={{ ...tdStyle, color: '#f87171', fontWeight: 'bold' }}>-{cleanPrice(b.amount).toLocaleString()} ر.س</td>
-                        <td style={tdStyle}>{b.supplier}</td>
-                        <td style={tdStyle}>{b.status}</td>
-                        <td style={{ ...tdStyle, color: '#f59e0b', fontWeight: 'bold' }}>{formatDateClean(b.dueDate)}</td>
-                      </tr>
-                    ))}
+                    {filteredIncomingBillsForCalc.map((b: any, index: number) => {
+                      const isTax = b.isTaxable !== false && b.isTaxable !== 'false' && b.isTaxable !== 'FALSE';
+                      const billSourceText = isTax ? "فاتورة واردة - خاضعة للضريبة" : "فاتورة واردة - غير خاضعة للضريبة";
+                      return (
+                        <tr key={`bill-${b.id}`} style={{ borderBottom: '1px solid #334155', background: index % 2 === 0 ? '#1e293b' : '#1a2638' }}>
+                          <td style={{ ...tdStyle, fontWeight: 'bold' }}>{billSourceText}</td>
+                          <td style={{ ...tdStyle, color: '#f87171', fontWeight: 'bold' }}>مصروف</td>
+                          <td style={tdStyle}>{b.category}</td>
+                          <td style={{ ...tdStyle, color: '#f87171', fontWeight: 'bold' }}>-{cleanPrice(b.amount).toLocaleString()} ر.س</td>
+                          <td style={tdStyle}>{b.supplier}</td>
+                          <td style={tdStyle}>{b.status}</td>
+                          <td style={{ ...tdStyle, color: '#f59e0b', fontWeight: 'bold' }}>{formatDateClean(b.dueDate)}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
 
-              {/* 2. عرض الجوال والأجهزة الذكية الصغرى (Mobile Cards View) */}
+              {/* 2. عرض الجوال */}
               <div className="mobile-cards-view" style={{ display: 'none', flexDirection: 'column', gap: '14px', marginTop: '20px' }}>
                 {paidInvoicesList.map((inv: any) => (
                   <div key={`inv-m-${inv.id}`} style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '14px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px', color: 'white' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontWeight: 'bold', color: '#4ade80' }}>إيراد (فاتورة #{inv.number || inv.id})</span>
+                      <span style={{ fontWeight: 'bold', color: '#4ade80' }}>فاتورة صادرة</span>
                       <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>📅 {formatDateClean(inv.dueDate)}</span>
                     </div>
                     <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#f8fafc' }}>العميل: {inv.client}</div>
@@ -407,7 +411,7 @@ export default function ExpensesPage() {
                 {validExpenses.map((e: any) => (
                   <div key={`exp-m-${e.id}`} style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '14px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px', color: 'white' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontWeight: 'bold', color: '#f87171' }}>مصروف يدوي ({e.category})</span>
+                      <span style={{ fontWeight: 'bold', color: '#f87171' }}>مصروف ({e.category})</span>
                       <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>📅 {formatDateClean(e.date)}</span>
                     </div>
                     <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#f8fafc' }}>{e.description}</div>
@@ -417,20 +421,23 @@ export default function ExpensesPage() {
                     </div>
                   </div>
                 ))}
-                {filteredIncomingBillsForCalc.map((b: any) => (
-                  <div key={`bill-m-${b.id}`} style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '14px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px', color: 'white' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontWeight: 'bold', color: '#f87171' }}>مصروف وارد ({b.category})</span>
-                      <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>📅 {formatDateClean(b.dueDate)}</span>
+                {filteredIncomingBillsForCalc.map((b: any) => {
+                  const isTax = b.isTaxable !== false && b.isTaxable !== 'false' && b.isTaxable !== 'FALSE';
+                  const billSourceText = isTax ? "فاتورة واردة - خاضعة للضريبة" : "فاتورة واردة - غير خاضعة للضريبة";
+                  return (
+                    <div key={`bill-m-${b.id}`} style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '14px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px', color: 'white' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontWeight: 'bold', color: '#f87171' }}>{billSourceText}</span>
+                        <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>📅 {formatDateClean(b.dueDate)}</span>
+                      </div>
+                      <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#f8fafc' }}>المورد: {b.supplier}</div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #334155', paddingTop: '8px' }}>
+                        <span style={{ color: '#f87171', fontWeight: 'bold', fontSize: '1.05rem' }}>-{cleanPrice(b.amount).toLocaleString()} ر.س</span>
+                        <span style={{ padding: '3px 8px', borderRadius: '4px', background: '#334155', fontSize: '0.75rem' }}>{b.status}</span>
+                      </div>
                     </div>
-                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#f8fafc' }}>المورد: {b.supplier}</div>
-                    <div style={{ fontSize: '0.8rem', color: '#38bdf8' }}>{b.isTaxable === false || b.isTaxable === 'false' ? 'غير خاضع للضريبة' : 'خاضع للضريبة'}</div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #334155', paddingTop: '8px' }}>
-                      <span style={{ color: '#f87171', fontWeight: 'bold', fontSize: '1.05rem' }}>-{cleanPrice(b.amount).toLocaleString()} ر.س</span>
-                      <span style={{ padding: '3px 8px', borderRadius: '4px', background: '#334155', fontSize: '0.75rem' }}>{b.status}</span>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
             </div>
@@ -438,8 +445,6 @@ export default function ExpensesPage() {
 
           {activeTab === 'fixed' && (
             <div style={{ marginTop: '20px' }}>
-              
-              {/* جدول الرواتب والمصروفات الثابتة للابتوب */}
               <div className="desktop-table-view" style={{ background: '#1e293b', padding: '20px', borderRadius: '16px', border: '1px solid #334155' }}>
                 <h3 style={{ color: '#38bdf8', marginTop: 0, fontSize: '1.1rem' }}>مسودة الرواتب والمصروفات الثابتة (مرجعي)</h3>
                 <table style={{ width: '100%', borderCollapse: 'collapse', color: 'white', marginTop: '15px', minWidth: '700px' }}>
@@ -462,7 +467,6 @@ export default function ExpensesPage() {
                 </table>
               </div>
 
-              {/* بطاقات الجوال للرواتب */}
               <div className="mobile-cards-view" style={{ display: 'none', flexDirection: 'column', gap: '14px', marginTop: '20px' }}>
                 {hrPayroll.map((emp: any) => (
                   <div key={`emp-m-${emp.employeeId}`} style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '14px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px', color: 'white' }}>
@@ -478,14 +482,11 @@ export default function ExpensesPage() {
                   </div>
                 ))}
               </div>
-
             </div>
           )}
 
           {activeTab === 'investors' && (
             <div style={{ marginTop: '20px' }}>
-              
-              {/* جدول المستثمرين للابتوب */}
               <div className="desktop-table-view" style={{ background: '#1e293b', padding: '20px', borderRadius: '16px', border: '1px solid #334155' }}>
                 <h3 style={{ color: 'white', marginTop: 0, fontSize: '1.1rem' }}>قائمة الشركاء والمستثمرين</h3>
                 <table style={{ width: '100%', borderCollapse: 'collapse', color: 'white', marginTop: '15px', minWidth: '700px' }}>
@@ -508,7 +509,6 @@ export default function ExpensesPage() {
                 </table>
               </div>
 
-              {/* بطاقات الجوال للمستثمرين */}
               <div className="mobile-cards-view" style={{ display: 'none', flexDirection: 'column', gap: '14px', marginTop: '20px' }}>
                 {investors.map((inv: any) => (
                   <div key={`inv-m-${inv.investorId}`} style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '14px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px', color: 'white' }}>
@@ -524,7 +524,6 @@ export default function ExpensesPage() {
                   </div>
                 ))}
               </div>
-
             </div>
           )}
         </>
