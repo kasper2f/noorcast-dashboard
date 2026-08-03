@@ -13,27 +13,58 @@ export function ToastNotification() {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
   useEffect(() => {
-    // الاستماع للأحداث الواردة من العمليات والتحركات داخل الداشبورد
-    const handleNewActivity = (event: CustomEvent) => {
+    // 1. معالجة الحدث المحلي وعرض التنبيه
+    const triggerToast = (detail: { action: string; target: string; details: string }) => {
+      // تنظيف النص وتأكيد ظهور (بواسطة: فلان) مرة واحدة فقط في النهاية بدون تكرار في البداية
+      let cleanDetails = detail.details || 'تم إجراء تحديث';
+      
+      // إزالة التكرارات المحتملة لاسم الموظف من البداية
+      cleanDetails = cleanDetails.replace(/^قام الموظف\s*\([^)]+\)\s*بـ/g, '').trim();
+
       const newToast: ToastMessage = {
-        id: 'toast-' + Date.now() + Math.random(),
-        action: event.detail.action || 'حركة جديدة',
-        target: event.detail.target || 'النظام',
-        details: event.detail.details || 'تم إجراء تحديث',
+        id: 'toast-' + Date.now() + '-' + Math.random(),
+        action: detail.action || 'حركة جديدة',
+        target: detail.target || 'النظام',
+        details: cleanDetails,
         timestamp: new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
       };
 
-      setToasts(prev => [newToast, ...prev.slice(0, 4)]); // الاحتفاظ بآخر 5 تنبيهات كحدマックス
+      setToasts(prev => [newToast, ...prev.slice(0, 4)]);
 
-      // إخفاء التنبيه تلقائياً بعد 5 ثوانٍ بموشن سلس
       setTimeout(() => {
         setToasts(prev => prev.filter(t => t.id !== newToast.id));
       }, 5000);
     };
 
+    // الاستماع للأحداث المحلية (للمستخدم نفسه)
+    const handleNewActivity = (event: CustomEvent) => {
+      triggerToast(event.detail);
+      
+      // مزامنة الحدث مع باقي الموظفين المفتوحين للنظام عبر الـ LocalStorage
+      try {
+        localStorage.setItem('noorcast_live_sync_toast', JSON.stringify({
+          ...event.detail,
+          randomKey: Date.now()
+        }));
+      } catch (e) {}
+    };
+
+    // 2. الاستماع لتحديثات باقي الموظفين المتواجدين في النظام (Cross-tab / Cross-user Sync)
+    const handleStorageSync = (e: StorageEvent) => {
+      if (e.key === 'noorcast_live_sync_toast' && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          triggerToast(parsed);
+        } catch (err) {}
+      }
+    };
+
     window.addEventListener('dashboard-activity' as any, handleNewActivity as any);
+    window.addEventListener('storage', handleStorageSync);
+
     return () => {
       window.removeEventListener('dashboard-activity' as any, handleNewActivity as any);
+      window.removeEventListener('storage', handleStorageSync);
     };
   }, []);
 
@@ -45,10 +76,6 @@ export function ToastNotification() {
         @keyframes slideInFromRight {
           0% { transform: translateX(120%); opacity: 0; }
           100% { transform: translateX(0); opacity: 1; }
-        }
-        @keyframes slideOutToRight {
-          0% { transform: translateX(0); opacity: 1; }
-          100% { transform: translateX(120%); opacity: 0; }
         }
         .toast-slide-in {
           animation: slideInFromRight 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;

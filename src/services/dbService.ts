@@ -6,7 +6,6 @@ const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzlL0sfoWhBFX
 
 // 🛡️ ذاكرة مؤقتة محلية لمنع اختفاء البيانات وتذبذب الشاشات (In-Memory Fallback Cache)
 const memoryCache: { [key: string]: { data: any, timestamp: number } } = {};
-const CACHE_TTL = 5 * 60 * 1000; // 5 دقائق صلاحية افتراضية كحماية قصوى
 
 // إعدادات Firebase المشتركة
 const firebaseConfig = {
@@ -28,28 +27,71 @@ const validateAndAlertEmptyData = (data: any, tabName: string) => {
   const isEmpty = !data || (Array.isArray(data) && data.length === 0) || (typeof data === 'object' && Object.keys(data).length === 0);
   
   if (isEmpty) {
-    // إذا عادت البيانات فارغة، نتحقق هل لدينا نسخة سابقة سليمة في الذاكرة المؤقتة لنعرضها بدل إظهار "لا توجد بيانات"
     if (memoryCache[tabName] && memoryCache[tabName].data) {
       console.warn(`⚠️ تذبذب في سحابة قوقل: تبويب [${tabName}] أعاد بيانات فارغة، وتم استرجاع آخر نسخة ناجحة تلقائياً.`);
       return memoryCache[tabName].data;
     }
+    
+    // محاولة الاسترجاع من التخزين المحلي كملجأ أخير
+    if (typeof window !== 'undefined') {
+      try {
+        const localSaved = localStorage.getItem(`noorcast_cache_${tabName}`);
+        if (localSaved) {
+          const parsed = JSON.parse(localSaved);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch (e) {}
+    }
+
     console.warn(`⚠️ تنبيه: تبويب أو جدول [${tabName}] فارغ تماماً ولا يحتوي على بيانات.`);
     return data;
   }
 
-  // تخزين النسخة الناجحة في الذاكرة المؤقتة
+  // تخزين النسخة الناجحة في الذاكرة المؤقتة والتخزين المحلي
   memoryCache[tabName] = {
     data: data,
     timestamp: Date.now()
   };
+  
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem(`noorcast_cache_${tabName}`, JSON.stringify(data));
+    } catch (e) {}
+  }
 
   return data;
 };
 
 /**
- * دالة مساعدة لعمل Fetch آمن مع Fallback للذاكرة المؤقتة عند انقطاع الاتصال أو بطء السيرفر
+ * دالة مساعدة لعمل Fetch آمن مع Fallback للذاكرة والتخزين المحلي عند انقطاع الاتصال أو بطء السيرفر
  */
-const safeFetchFromSheet = async (actionQuery: string, tabName: string, fallbackValue: any = []) => {
+const safeFetchFromSheet = async (actionQuery: string, tabName: string, forceRefresh: boolean = false, fallbackValue: any = []) => {
+  // إذا لم يُطلب تحديث إجباري، نعرض البيانات المخزنة محلياً فوراً للاستجابة السريعة
+  if (!forceRefresh && typeof window !== 'undefined') {
+    try {
+      const localSaved = localStorage.getItem(`noorcast_cache_${tabName}`);
+      if (localSaved) {
+        const parsed = JSON.parse(localSaved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          // تحديث صامت في الخلفية
+          setTimeout(async () => {
+            try {
+              const bgRes = await fetch(`${GOOGLE_SCRIPT_URL}?action=${actionQuery}&_t=${Date.now()}`);
+              if (bgRes.ok) {
+                const bgData = await bgRes.json();
+                if (Array.isArray(bgData) && bgData.length > 0) {
+                  localStorage.setItem(`noorcast_cache_${tabName}`, JSON.stringify(bgData));
+                  memoryCache[tabName] = { data: bgData, timestamp: Date.now() };
+                }
+              }
+            } catch (err) {}
+          }, 150);
+          return parsed;
+        }
+      }
+    } catch (e) {}
+  }
+
   try {
     const response = await fetch(`${GOOGLE_SCRIPT_URL}?action=${actionQuery}&_t=${Date.now()}`);
     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
@@ -59,10 +101,16 @@ const safeFetchFromSheet = async (actionQuery: string, tabName: string, fallback
   } catch (error) {
     console.error(`خطأ في جلب بيانات [${tabName}]:`, error);
     
-    // إذا فشل الاتصال بالكامل، نعيد آخر بيانات ناجحة من الذاكرة بدلاً من تدمير الواجهة
     if (memoryCache[tabName] && memoryCache[tabName].data) {
-      console.log(`📦 تم تحميل بيانات [${tabName}] من الذاكرة المحلية المؤقتة نظراً لتعذر الاتصال السحابي.`);
+      console.log(`📦 تم تحميل بيانات [${tabName}] من الذاكرة المحلية المؤقتة.`);
       return memoryCache[tabName].data;
+    }
+    
+    if (typeof window !== 'undefined') {
+      try {
+        const localSaved = localStorage.getItem(`noorcast_cache_${tabName}`);
+        if (localSaved) return JSON.parse(localSaved);
+      } catch (e) {}
     }
     
     return fallbackValue;
@@ -78,8 +126,6 @@ export const requestNotificationPermission = async () => {
 
     const permission = await Notification.requestPermission();
     if (permission === 'granted') {
-      console.log('Notification permission granted.');
-
       let token = 'noorcast-token-' + Math.random().toString(36).substring(2) + Date.now();
       
       try {
@@ -97,16 +143,11 @@ export const requestNotificationPermission = async () => {
           serviceWorkerRegistration: registration || undefined
         }).catch(() => null);
 
-        if (fcmToken) {
-          token = fcmToken;
-        }
-      } catch (err) {
-        console.warn('FCM standard token warning caught, using cloud persistent token fallback.');
-      }
+        if (fcmToken) token = fcmToken;
+      } catch (err) {}
 
       localStorage.setItem('fcm_token', token);
       localStorage.setItem('notifications_enabled', 'true');
-      console.log('🔥 Cloud Device Token Active:', token);
 
       const currentUserStr = localStorage.getItem('currentUser') || localStorage.getItem('userEmail') || localStorage.getItem('username') || 'abdullatif';
       
@@ -137,12 +178,9 @@ export const onForegroundMessage = (callback?: (payload: any) => void) => {
   try {
     const messaging = getMessaging(app);
     onMessage(messaging, (payload) => {
-      console.log('Message received. ', payload);
       if (callback) callback(payload);
     });
-  } catch (e) {
-    console.error(e);
-  }
+  } catch (e) {}
 };
 
 export const uploadFileToCloudinary = async (file: File): Promise<string> => {
@@ -157,12 +195,8 @@ export const uploadFileToCloudinary = async (file: File): Promise<string> => {
     });
 
     const data = await response.json();
-    if (data.secure_url) {
-      return data.secure_url;
-    } else {
-      console.error("Cloudinary error response:", data);
-      throw new Error(data.error?.message || 'فشل رفع الملف إلى السحابة');
-    }
+    if (data.secure_url) return data.secure_url;
+    throw new Error(data.error?.message || 'فشل رفع الملف إلى السحابة');
   } catch (error) {
     console.error("Cloudinary upload error:", error);
     throw error;
@@ -195,14 +229,6 @@ export const logDashboardAction = async (action: string, target: string, details
       }
     }
 
-    if (userEmail === 'unknown@domain.com' && username === 'system') {
-      const activeAdmin = localStorage.getItem('activeAdmin');
-      if (activeAdmin) {
-        userEmail = activeAdmin;
-        username = activeAdmin.split('@')[0];
-      }
-    }
-
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('dashboard-activity', {
         detail: { action, target, details: `${details} (بواسطة: @${username})` }
@@ -223,13 +249,11 @@ export const logDashboardAction = async (action: string, target: string, details
         details: details
       })
     });
-  } catch (error) {
-    console.error("Error logging action to cloud audit:", error);
-  }
+  } catch (error) {}
 };
 
-export const getAuditLogs = async () => safeFetchFromSheet('getAuditLogs', 'AuditLogs');
-export const getHRActionLogs = async () => safeFetchFromSheet('getHRActionLogs', 'HRActionLogs');
+export const getAuditLogs = async (forceRefresh = false) => safeFetchFromSheet('getAuditLogs', 'AuditLogs', forceRefresh);
+export const getHRActionLogs = async (forceRefresh = false) => safeFetchFromSheet('getHRActionLogs', 'HRActionLogs', forceRefresh);
 
 export const updateEmployeeStatusInSheet = async (username: string, newStatus: string) => {
   try {
@@ -237,73 +261,75 @@ export const updateEmployeeStatusInSheet = async (username: string, newStatus: s
       method: 'POST',
       mode: 'no-cors',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'updateHRStatus',
-        username: username,
-        status: newStatus
-      })
+      body: JSON.stringify({ action: 'updateHRStatus', username: username, status: newStatus })
     });
   } catch (error) {
-    console.error("Error updating employee status in sheet:", error);
     throw error;
   }
 };
 
-export const nominateEmployeeForExcellence = async (nominationData: {
-  employeeUsername: string;
-  reason: string;
-  weekTitle?: string;
-}) => {
+export const nominateEmployeeForExcellence = async (nominationData: { employeeUsername: string; reason: string; weekTitle?: string; }) => {
   try {
     await fetch(GOOGLE_SCRIPT_URL, {
       method: 'POST',
       mode: 'no-cors',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        action: 'addExcellenceNomination', 
-        timestamp: new Date().toISOString(),
-        ...nominationData 
-      })
+      body: JSON.stringify({ action: 'addExcellenceNomination', timestamp: new Date().toISOString(), ...nominationData })
     });
-    
-    await logDashboardAction(
-      'EXCELLENCE_NOMINATION', 
-      `@${nominationData.employeeUsername}`, 
-      `تم ترشيح الموظف لجائزة التميز: ${nominationData.reason}`
-    );
-
+    await logDashboardAction('EXCELLENCE_NOMINATION', `@${nominationData.employeeUsername}`, `تم ترشيح الموظف لجائزة التميز: ${nominationData.reason}`);
     return "Success";
   } catch (error) {
-    console.error("Error submitting employee excellence nomination:", error);
     throw error;
   }
 };
 
-export const submitAdministrativeAction = async (actionData: {
-  employeeUsername: string;
-  actionType: string; 
-  amount: number;
-  reason: string;
-}) => {
+export const submitAdministrativeAction = async (actionData: { employeeUsername: string; actionType: string; amount: number; reason: string; }) => {
   try {
     await fetch(GOOGLE_SCRIPT_URL, {
       method: 'POST',
       mode: 'no-cors',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        action: 'addHRAction', 
-        timestamp: new Date().toISOString(),
-        ...actionData 
-      })
+      body: JSON.stringify({ action: 'addHRAction', timestamp: new Date().toISOString(), ...actionData })
     });
     return "Success";
   } catch (error) {
-    console.error("Error submitting administrative action:", error);
     throw error;
   }
 };
 
-export const getOrders = async () => safeFetchFromSheet('get', 'Orders');
+// الدوال العامة لجلب البيانات مع دعم forceRefresh لجلب البيانات الطازجة من الشيت مباشرة عند الطلب
+export const getOrders = async (forceRefresh = false) => safeFetchFromSheet('get', 'Orders', forceRefresh);
+export const getAdmins = async (forceRefresh = false) => safeFetchFromSheet('getAdmins', 'Admins', forceRefresh);
+export const getServices = async (forceRefresh = false) => {
+  const data = await safeFetchFromSheet('getServices', 'Services', forceRefresh);
+  return Array.isArray(data) ? data.map((s: any) => ({ ...s, category: s.category ? String(s.category).trim() : 'أخرى' })) : [];
+};
+export const getCoupons = async (forceRefresh = false) => safeFetchFromSheet('getCoupons', 'Coupons', forceRefresh);
+export const getExpensesSheet = async (forceRefresh = false) => {
+  const validData = await safeFetchFromSheet('getExpenses', 'ExpensesSheet', forceRefresh);
+  if (Array.isArray(validData)) {
+    return validData.filter((item: any) => {
+      const desc = String(item.description || '').toLowerCase();
+      const amt = Number(item.amount || 0);
+      return amt !== 5750 && !desc.includes('مقدم فاتورة') && !desc.includes('inv-2026-001');
+    });
+  }
+  return [];
+};
+export const getHRPayrollSheet = async (forceRefresh = false) => safeFetchFromSheet('getHR', 'HRPayrollSheet', forceRefresh);
+export const getInvestorsSheet = async (forceRefresh = false) => safeFetchFromSheet('getInvestors', 'InvestorsSheet', forceRefresh);
+export const getInvoicesSheet = async (forceRefresh = false) => safeFetchFromSheet('getInvoices', 'InvoicesSheet', forceRefresh);
+export const getIncomingBillsSheet = async (forceRefresh = false) => safeFetchFromSheet('getIncomingBills', 'IncomingBillsSheet', forceRefresh);
+export const getClientContractsSheet = async (forceRefresh = false) => safeFetchFromSheet('getClientContracts', 'ClientContracts', forceRefresh);
+export const getEmployeeContractsSheet = async (forceRefresh = false) => safeFetchFromSheet('getEmployeeContracts', 'EmployeeContracts', forceRefresh);
+export const getFreelancerContractsSheet = async (forceRefresh = false) => safeFetchFromSheet('getFreelancerContracts', 'FreelancerContracts', forceRefresh);
+export const getGeneralDocumentsSheet = async (forceRefresh = false) => safeFetchFromSheet('getGeneralDocuments', 'GeneralDocuments', forceRefresh);
+export const getMarketingSocialSheet = async (forceRefresh = false) => safeFetchFromSheet('getMarketingSocial', 'MarketingSocial', forceRefresh);
+export const getQuotesSheet = async (forceRefresh = false) => safeFetchFromSheet('getQuotes', 'QuotesSheet', forceRefresh);
+export const getFreelanceSheet = async (forceRefresh = false) => safeFetchFromSheet('getFreelance', 'FreelanceSheet', forceRefresh);
+export const getFreelanceFinanceSheet = async (forceRefresh = false) => safeFetchFromSheet('getFreelanceFinance', 'FreelanceFinance', forceRefresh);
+export const getProjects = async (forceRefresh = false) => safeFetchFromSheet('getProjects', 'Projects', forceRefresh);
+export const getTasks = async (forceRefresh = false) => safeFetchFromSheet('getTasks', 'Tasks', forceRefresh);
 
 export const updateOrderStatus = async (orderId: string, status: string, lastContactedBy?: string, notes?: string) => {
   try {
@@ -322,42 +348,14 @@ export const updateOrderStatus = async (orderId: string, status: string, lastCon
       method: 'POST',
       mode: 'no-cors',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        action: 'update', 
-        orderId, 
-        status, 
-        lastContactedBy: activeUser, 
-        notes,
-        triggerNotification: true,
-        notificationTitle: 'تحديث حالة الطلب 🔔',
-        notificationBody: `تم تغيير حالة الطلب #${orderId} إلى: [${status}] بواسطة ${activeUser}`
-      })
+      body: JSON.stringify({ action: 'update', orderId, status, lastContactedBy: activeUser, notes })
     });
-
-    await logDashboardAction(
-      'UPDATE_ORDER',
-      `Order #${orderId}`,
-      `قام الموظف (${activeUser}) بتحديث حالة الطلب إلى [${status}]`
-    );
-
+    await logDashboardAction('UPDATE_ORDER', `Order #${orderId}`, `قام الموظف (${activeUser}) بتحديث حالة الطلب إلى [${status}]`);
     return "Success";
   } catch (error) {
-    console.error("Error updating order status in dashboard:", error);
     throw error;
   }
 };
-
-export const getAdmins = async () => safeFetchFromSheet('getAdmins', 'Admins');
-
-export const getServices = async () => {
-  const data = await safeFetchFromSheet('getServices', 'Services');
-  return Array.isArray(data) ? data.map((s: any) => ({
-    ...s,
-    category: s.category ? String(s.category).trim() : 'أخرى'
-  })) : [];
-};
-
-export const getCoupons = async () => safeFetchFromSheet('getCoupons', 'Coupons');
 
 export const addService = async (serviceData: any) => {
   try {
@@ -370,7 +368,6 @@ export const addService = async (serviceData: any) => {
     await logDashboardAction('ADD_SERVICE', serviceData.title || 'New Service', 'تمت إضافة خدمة جديدة');
     return "Success";
   } catch (error) {
-    console.error("Error adding service from dashboard:", error);
     throw error;
   }
 };
@@ -386,7 +383,6 @@ export const updateService = async (serviceData: any) => {
     await logDashboardAction('UPDATE_SERVICE', serviceData.title || `Service #${serviceData.id}`, 'تم تحديث بيانات الخدمة');
     return "Success";
   } catch (error) {
-    console.error("Error updating service from dashboard:", error);
     throw error;
   }
 };
@@ -402,21 +398,8 @@ export const deleteService = async (serviceId: string) => {
     await logDashboardAction('DELETE_SERVICE', `Service #${serviceId}`, 'تم حذف الخدمة');
     return "Success";
   } catch (error) {
-    console.error("Error deleting service from dashboard:", error);
     throw error;
   }
-};
-
-export const getExpensesSheet = async () => {
-  const validData = await safeFetchFromSheet('getExpenses', 'ExpensesSheet');
-  if (Array.isArray(validData)) {
-    return validData.filter((item: any) => {
-      const desc = String(item.description || '').toLowerCase();
-      const amt = Number(item.amount || 0);
-      return amt !== 5750 && !desc.includes('مقدم فاتورة') && !desc.includes('inv-2026-001');
-    });
-  }
-  return [];
 };
 
 export const saveExpenseToSheet = async (expenseData: any) => {
@@ -430,12 +413,9 @@ export const saveExpenseToSheet = async (expenseData: any) => {
     await logDashboardAction('SAVE_EXPENSE', expenseData.description, `تم حفظ مصروف بمبلغ ${expenseData.amount} ر.س`);
     return "Success";
   } catch (error) {
-    console.error("Error saving expense to sheet:", error);
     throw error;
   }
 };
-
-export const getHRPayrollSheet = async () => safeFetchFromSheet('getHR', 'HRPayrollSheet');
 
 export const addHREntryToSheet = async (hrData: any) => {
   try {
@@ -448,12 +428,9 @@ export const addHREntryToSheet = async (hrData: any) => {
     await logDashboardAction('ADD_HR_EMPLOYEE', hrData.name || 'Employee', `تمت إضافة الموظف براتب ${hrData.salary || 0} ر.س`);
     return "Success";
   } catch (error) {
-    console.error("Error adding HR entry to sheet:", error);
     throw error;
   }
 };
-
-export const getInvestorsSheet = async () => safeFetchFromSheet('getInvestors', 'InvestorsSheet');
 
 export const saveInvestorToSheet = async (investorData: any) => {
   try {
@@ -466,12 +443,9 @@ export const saveInvestorToSheet = async (investorData: any) => {
     await logDashboardAction('SAVE_INVESTOR', investorData.name, `تم حفظ بيانات المستثمر بنسبة ملكية ${investorData.ownershipPercentage}%`);
     return "Success";
   } catch (error) {
-    console.error("Error saving investor to sheet:", error);
     throw error;
   }
 };
-
-export const getInvoicesSheet = async () => safeFetchFromSheet('getInvoices', 'InvoicesSheet');
 
 export const saveInvoiceToSheet = async (invoiceData: any) => {
   try {
@@ -484,12 +458,9 @@ export const saveInvoiceToSheet = async (invoiceData: any) => {
     await logDashboardAction('SAVE_INVOICE', invoiceData.number || 'Invoice', `تم حفظ الفاتورة بقيمة ${invoiceData.amount} ر.س`);
     return "Success";
   } catch (error) {
-    console.error("Error saving invoice to sheet:", error);
     throw error;
   }
 };
-
-export const getIncomingBillsSheet = async () => safeFetchFromSheet('getIncomingBills', 'IncomingBillsSheet');
 
 export const saveIncomingBillToSheet = async (billData: any) => {
   try {
@@ -502,12 +473,9 @@ export const saveIncomingBillToSheet = async (billData: any) => {
     await logDashboardAction('SAVE_INCOMING_BILL', billData.supplier || 'Bill', `تم حفظ الفاتورة الواردة بقيمة ${billData.amount} ر.س`);
     return "Success";
   } catch (error) {
-    console.error("Error saving incoming bill to sheet:", error);
     throw error;
   }
 };
-
-export const getClientContractsSheet = async () => safeFetchFromSheet('getClientContracts', 'ClientContracts');
 
 export const saveClientContractToSheet = async (contractData: any) => {
   try {
@@ -519,12 +487,9 @@ export const saveClientContractToSheet = async (contractData: any) => {
     });
     return "Success";
   } catch (error) {
-    console.error("Error saving client contract:", error);
     throw error;
   }
 };
-
-export const getEmployeeContractsSheet = async () => safeFetchFromSheet('getEmployeeContracts', 'EmployeeContracts');
 
 export const saveEmployeeContractToSheet = async (contractData: any) => {
   try {
@@ -536,12 +501,9 @@ export const saveEmployeeContractToSheet = async (contractData: any) => {
     });
     return "Success";
   } catch (error) {
-    console.error("Error saving employee contract:", error);
     throw error;
   }
 };
-
-export const getFreelancerContractsSheet = async () => safeFetchFromSheet('getFreelancerContracts', 'FreelancerContracts');
 
 export const saveFreelancerContractToSheet = async (contractData: any) => {
   try {
@@ -553,12 +515,9 @@ export const saveFreelancerContractToSheet = async (contractData: any) => {
     });
     return "Success";
   } catch (error) {
-    console.error("Error saving freelancer contract:", error);
     throw error;
   }
 };
-
-export const getGeneralDocumentsSheet = async () => safeFetchFromSheet('getGeneralDocuments', 'GeneralDocuments');
 
 export const saveGeneralDocumentToSheet = async (docData: any) => {
   try {
@@ -570,12 +529,9 @@ export const saveGeneralDocumentToSheet = async (docData: any) => {
     });
     return "Success";
   } catch (error) {
-    console.error("Error saving general document:", error);
     throw error;
   }
 };
-
-export const getMarketingSocialSheet = async () => safeFetchFromSheet('getMarketingSocial', 'MarketingSocial');
 
 export const saveMarketingSocialToSheet = async (data: any) => {
   try {
@@ -587,7 +543,6 @@ export const saveMarketingSocialToSheet = async (data: any) => {
     });
     return "Success";
   } catch (error) {
-    console.error("Error saving marketing social entry:", error);
     throw error;
   }
 };
@@ -602,12 +557,9 @@ export const deleteMarketingSocialFromSheet = async (id: string) => {
     });
     return "Success";
   } catch (error) {
-    console.error("Error deleting marketing social entry:", error);
     throw error;
   }
 };
-
-export const getQuotesSheet = async () => safeFetchFromSheet('getQuotes', 'QuotesSheet');
 
 export const saveQuoteToSheet = async (quoteData: any) => {
   try {
@@ -619,12 +571,9 @@ export const saveQuoteToSheet = async (quoteData: any) => {
     });
     return "Success";
   } catch (error) {
-    console.error("Error saving quote:", error);
     throw error;
   }
 };
-
-export const getFreelanceSheet = async () => safeFetchFromSheet('getFreelance', 'FreelanceSheet');
 
 export const saveFreelanceToSheet = async (freelancerData: any) => {
   try {
@@ -636,7 +585,6 @@ export const saveFreelanceToSheet = async (freelancerData: any) => {
     });
     return "Success";
   } catch (error) {
-    console.error("Error saving freelance to sheet:", error);
     throw error;
   }
 };
@@ -651,12 +599,9 @@ export const deleteFreelanceFromSheet = async (id: string) => {
     });
     return "Success";
   } catch (error) {
-    console.error("Error deleting freelance from sheet:", error);
     throw error;
   }
 };
-
-export const getFreelanceFinanceSheet = async () => safeFetchFromSheet('getFreelanceFinance', 'FreelanceFinance');
 
 export const saveFreelanceFinanceToSheet = async (data: any) => {
   try {
@@ -668,7 +613,6 @@ export const saveFreelanceFinanceToSheet = async (data: any) => {
     });
     return "Success";
   } catch (error) {
-    console.error("Error saving freelance finance entry:", error);
     throw error;
   }
 };
@@ -683,12 +627,9 @@ export const deleteFreelanceFinanceFromSheet = async (id: string) => {
     });
     return "Success";
   } catch (error) {
-    console.error("Error deleting freelance finance entry:", error);
     throw error;
   }
 };
-
-export const getProjects = async () => safeFetchFromSheet('getProjects', 'Projects');
 
 export const saveProjectToSheet = async (projectData: any) => {
   try {
@@ -701,7 +642,6 @@ export const saveProjectToSheet = async (projectData: any) => {
     await logDashboardAction('SAVE_PROJECT', projectData.name || 'Project', 'تم حفظ/تحديث المشروع سحابياً');
     return "Success";
   } catch (error) {
-    console.error("Error saving project to sheet:", error);
     throw error;
   }
 };
@@ -717,12 +657,9 @@ export const deleteProjectFromSheet = async (projectId: string) => {
     await logDashboardAction('DELETE_PROJECT', `Project #${projectId}`, 'تم حذف المشروع سحابياً');
     return "Success";
   } catch (error) {
-    console.error("Error deleting project from sheet:", error);
     throw error;
   }
 };
-
-export const getTasks = async () => safeFetchFromSheet('getTasks', 'Tasks');
 
 export const saveTaskToSheet = async (taskData: any) => {
   try {
@@ -735,7 +672,6 @@ export const saveTaskToSheet = async (taskData: any) => {
     await logDashboardAction('SAVE_TASK', taskData.title || 'Task', `تم حفظ/تحديث المهمة وإسنادها للموظف: ${taskData.assignedTo || 'غير محدد'}`);
     return "Success";
   } catch (error) {
-    console.error("Error saving task to sheet:", error);
     throw error;
   }
 };
@@ -751,7 +687,6 @@ export const deleteTaskFromSheet = async (taskId: string) => {
     await logDashboardAction('DELETE_TASK', `Task #${taskId}`, 'تم حذف المهمة سحابياً');
     return "Success";
   } catch (error) {
-    console.error("Error deleting task from sheet:", error);
     throw error;
   }
 };
