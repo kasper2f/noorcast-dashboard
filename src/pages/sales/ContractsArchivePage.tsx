@@ -17,7 +17,7 @@ export default function ContractsArchivePage() {
 
   const [searchTerm, setSearchTerm] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [loadingCloud, setLoadingCloud] = useState(false);
+  const [loadingCloud, setLoadingCloud] = useState(true); // تبدأ بـ true لضمان ظهور مؤشر التحميل فور الفتح
 
   const [companyInfo] = useState(() => {
     try {
@@ -50,7 +50,6 @@ export default function ContractsArchivePage() {
     loadAllContracts();
   }, []);
 
-  // دالة الفحص الذكي للبيانات الفارغة والتنبيه عنها
   const validateAndAlertEmpty = (data: any[], tabName: string) => {
     if (!data || data.length === 0) {
       console.warn(`⚠️ تنبيه: جدول أو تبويب الأرشيف [${tabName}] فارغ تماماً ولا يحتوي على سجلات.`);
@@ -100,7 +99,6 @@ export default function ContractsArchivePage() {
     }
   };
 
-  // 1. إضافة عقد عميل سحابياً
   const handleSaveClient = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newClient.title || !newClient.party) { alert("يرجى إدخال العنوان واسم العميل."); return; }
@@ -133,7 +131,6 @@ export default function ContractsArchivePage() {
     }
   };
 
-  // 2. إضافة عقد موظف سحابياً
   const handleSaveEmployee = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newEmployee.title || !newEmployee.party) { alert("يرجى إدخال المسمى واسم الموظف."); return; }
@@ -166,7 +163,6 @@ export default function ContractsArchivePage() {
     }
   };
 
-  // 3. إضافة عقد مستقل سحابياً
   const handleSaveFreelancer = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newFreelancer.freelancerName || !newFreelancer.amount) { alert("يرجى إدخال اسم المستقل والمبلغ."); return; }
@@ -199,7 +195,6 @@ export default function ContractsArchivePage() {
     }
   };
 
-  // 4. إضافة مستند عام سحابياً
   const handleSaveGeneral = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newGeneral.title) { alert("يرجى إدخال عنوان المستند."); return; }
@@ -270,9 +265,30 @@ export default function ContractsArchivePage() {
     printWindow.document.close();
   };
 
+  const filteredClients = clientContracts.filter(c => c.title.toLowerCase().includes(searchTerm.toLowerCase()) || c.party.toLowerCase().includes(searchTerm.toLowerCase()));
+  const filteredEmployees = employeeContracts.filter(e => e.title.toLowerCase().includes(searchTerm.toLowerCase()) || e.party.toLowerCase().includes(searchTerm.toLowerCase()));
+  const filteredFreelancers = freelancerContracts.filter(f => f.freelancerName.toLowerCase().includes(searchTerm.toLowerCase()));
+  const filteredGeneral = generalDocs.filter(g => g.title.toLowerCase().includes(searchTerm.toLowerCase()));
+
   return (
     <div style={{ padding: '32px', color: 'white', minHeight: '100vh', background: '#0f172a', fontFamily: 'Cairo, sans-serif', boxSizing: 'border-box' }}>
       
+      {/* حقن قواعد الاستجابة الذكية للشاشات الكبيرة والجوال */}
+      <style>{`
+        @media (max-width: 900px) {
+          .desktop-table-view { display: none !important; }
+          .mobile-cards-view { display: flex !important; }
+        }
+        @media (min-width: 901px) {
+          .desktop-table-view { display: block !important; }
+          .mobile-cards-view { display: none !important; }
+        }
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+      `}</style>
+
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px', flexWrap: 'wrap', gap: '15px' }}>
         <div>
           <h1 style={{ margin: 0, fontSize: '1.85rem', fontWeight: 'bold' }}>📁 العقود والأرشيف القانوني</h1>
@@ -282,7 +298,7 @@ export default function ContractsArchivePage() {
         </div>
 
         <button onClick={loadAllContracts} style={secondaryBtn} disabled={loadingCloud}>
-          <FiRefreshCw /> {loadingCloud ? 'جاري المزامنة...' : 'مزامنة سحابياً 🔄'}
+          <FiRefreshCw className={loadingCloud ? "fa-spin" : ""} /> {loadingCloud ? 'جاري المزامنة...' : 'مزامنة سحابياً 🔄'}
         </button>
       </div>
 
@@ -413,143 +429,270 @@ export default function ContractsArchivePage() {
         </div>
       )}
 
-      {/* الجداول النشطة */}
-      <div style={{ background: '#1e293b', borderRadius: '16px', border: '1px solid #334155', padding: '25px' }}>
+      {/* المحتوى (الجداول للشاشات الكبيرة + البطاقات للجوال) */}
+      <div style={{ background: '#1e293b', borderRadius: '16px', border: '1px solid #334155', padding: '20px' }}>
         
-        {activeTab === 'clients' && (
-          <div style={{ overflowX: 'auto' }}>
-            {clientContracts.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>📁 لا توجد عقود عملاء مسجلة حالياً في الأرشيف السحابي.</div>
-            ) : (
-              <table style={{ width: '100%', borderCollapse: 'collapse', color: 'white', fontSize: '0.9rem', minWidth: '700px' }}>
-                <thead>
-                  <tr style={{ background: '#0f172a', borderBottom: '1px solid #334155', color: '#94a3b8' }}>
-                    {['رقم العقد', 'عنوان المشروع', 'اسم العميل', 'القيمة', 'تاريخ الأرشفة', 'الملف', 'الإجراءات'].map(h => <th key={h} style={thStyle}>{h}</th>)}
-                  </tr>
-                </thead>
-                <tbody>
-                  {clientContracts.filter(c => c.title.toLowerCase().includes(searchTerm.toLowerCase()) || c.party.toLowerCase().includes(searchTerm.toLowerCase())).map((c, i) => (
-                    <tr key={i} style={{ borderBottom: '1px solid #334155' }}>
-                      <td style={{ ...tdStyle, color: '#38bdf8', fontWeight: 'bold' }}>{c.id}</td>
-                      <td style={{ ...tdStyle, fontWeight: 'bold' }}>{c.title}</td>
-                      <td style={tdStyle}>{c.party}</td>
-                      <td style={{ ...tdStyle, color: '#4ade80' }}>{c.value}</td>
-                      <td style={{ ...tdStyle, color: '#cbd5e1' }}>{c.date}</td>
-                      <td style={{ ...tdStyle, color: '#94a3b8' }}>{c.fileName}</td>
-                      <td style={tdStyle}>
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                          <button onClick={() => handleViewFile(c)} style={actionBtn}>معاينة الملف</button>
-                          <button onClick={() => setClientContracts(clientContracts.filter(x => x.id !== c.id))} style={iconDeleteBtn}><FiTrash2 /></button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
+        {loadingCloud ? (
+          <div style={{ textAlign: 'center', padding: '50px 20px', color: '#38bdf8', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+            <div style={{ width: '36px', height: '36px', border: '3px solid #334155', borderTop: '3px solid #38bdf8', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
+            <div style={{ fontSize: '1rem', fontWeight: 'bold' }}>⏳ جاري تحميل البيانات من السحابة، يرجى الانتظار...</div>
           </div>
-        )}
+        ) : (
+          <>
+            {/* 1. عقود العملاء */}
+            {activeTab === 'clients' && (
+              <div>
+                {filteredClients.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>📁 لا توجد عقود عملاء مسجلة حالياً في الأرشيف السحابي.</div>
+                ) : (
+                  <>
+                    {/* جدول اللابتوب */}
+                    <div className="desktop-table-view" style={{ overflowX: 'auto' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', color: 'white', fontSize: '0.9rem', minWidth: '700px' }}>
+                        <thead>
+                          <tr style={{ background: '#0f172a', borderBottom: '1px solid #334155', color: '#94a3b8' }}>
+                            {['رقم العقد', 'عنوان المشروع', 'اسم العميل', 'القيمة', 'تاريخ الأرشفة', 'الملف', 'الإجراءات'].map(h => <th key={h} style={thStyle}>{h}</th>)}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filteredClients.map((c, i) => (
+                            <tr key={i} style={{ borderBottom: '1px solid #334155' }}>
+                              <td style={{ ...tdStyle, color: '#38bdf8', fontWeight: 'bold' }}>{c.id}</td>
+                              <td style={{ ...tdStyle, fontWeight: 'bold' }}>{c.title}</td>
+                              <td style={tdStyle}>{c.party}</td>
+                              <td style={{ ...tdStyle, color: '#4ade80' }}>{c.value}</td>
+                              <td style={{ ...tdStyle, color: '#cbd5e1' }}>{c.date}</td>
+                              <td style={{ ...tdStyle, color: '#94a3b8' }}>{c.fileName}</td>
+                              <td style={tdStyle}>
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                  <button onClick={() => handleViewFile(c)} style={actionBtn}>معاينة الملف</button>
+                                  <button onClick={() => setClientContracts(clientContracts.filter(x => x.id !== c.id))} style={iconDeleteBtn}><FiTrash2 /></button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
 
-        {activeTab === 'employees' && (
-          <div style={{ overflowX: 'auto' }}>
-            {employeeContracts.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>👥 لا توجد عقود موظفين مسجلة حالياً في الأرشيف السحابي.</div>
-            ) : (
-              <table style={{ width: '100%', borderCollapse: 'collapse', color: 'white', fontSize: '0.9rem', minWidth: '700px' }}>
-                <thead>
-                  <tr style={{ background: '#0f172a', borderBottom: '1px solid #334155', color: '#94a3b8' }}>
-                    {['رقم العقد', 'المسمى الوظيفي', 'اسم الموظف', 'الراتب', 'تاريخ الأرشفة', 'الملف', 'الإجراءات'].map(h => <th key={h} style={thStyle}>{h}</th>)}
-                  </tr>
-                </thead>
-                <tbody>
-                  {employeeContracts.filter(e => e.title.toLowerCase().includes(searchTerm.toLowerCase()) || e.party.toLowerCase().includes(searchTerm.toLowerCase())).map((e, i) => (
-                    <tr key={i} style={{ borderBottom: '1px solid #334155' }}>
-                      <td style={{ ...tdStyle, color: '#38bdf8', fontWeight: 'bold' }}>{e.id}</td>
-                      <td style={{ ...tdStyle, fontWeight: 'bold' }}>{e.title}</td>
-                      <td style={tdStyle}>{e.party}</td>
-                      <td style={{ ...tdStyle, color: '#4ade80' }}>{e.value}</td>
-                      <td style={{ ...tdStyle, color: '#cbd5e1' }}>{e.date}</td>
-                      <td style={{ ...tdStyle, color: '#94a3b8' }}>{e.fileName}</td>
-                      <td style={tdStyle}>
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                          <button onClick={() => handleViewFile(e)} style={actionBtn}>معاينة الملف</button>
-                          <button onClick={() => setEmployeeContracts(employeeContracts.filter(x => x.id !== e.id))} style={iconDeleteBtn}><FiTrash2 /></button>
+                    {/* بطاقات الجوال */}
+                    <div className="mobile-cards-view" style={{ display: 'none', flexDirection: 'column', gap: '14px' }}>
+                      {filteredClients.map((c, i) => (
+                        <div key={i} style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ color: '#38bdf8', fontWeight: 'bold', fontSize: '0.85rem' }}>{c.id}</span>
+                            <span style={{ color: '#4ade80', fontWeight: 'bold' }}>{c.value}</span>
+                          </div>
+                          <div>
+                            <div style={{ fontSize: '1.05rem', fontWeight: 'bold', color: '#f8fafc' }}>{c.title}</div>
+                            <div style={{ fontSize: '0.9rem', color: '#94a3b8', marginTop: '2px' }}>العميل: {c.party}</div>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: '#cbd5e1', borderTop: '1px solid #334155', paddingTop: '8px' }}>
+                            <span>التاريخ: {c.date}</span>
+                            <span>{c.fileName}</span>
+                          </div>
+                          <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                            <button onClick={() => handleViewFile(c)} style={{ ...actionBtn, flex: 1, justifyContent: 'center' }}>معاينة الملف 📄</button>
+                            <button onClick={() => setClientContracts(clientContracts.filter(x => x.id !== c.id))} style={iconDeleteBtn}><FiTrash2 /></button>
+                          </div>
                         </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
             )}
-          </div>
-        )}
 
-        {activeTab === 'freelancers' && (
-          <div style={{ overflowX: 'auto' }}>
-            {freelancerContracts.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>💼 لا توجد عقود مستقلين مسجلة حالياً في الأرشيف السحابي.</div>
-            ) : (
-              <table style={{ width: '100%', borderCollapse: 'collapse', color: 'white', fontSize: '0.9rem', minWidth: '700px' }}>
-                <thead>
-                  <tr style={{ background: '#0f172a', borderBottom: '1px solid #334155', color: '#94a3b8' }}>
-                    {['رقم العقد', 'اسم المستقل', 'المهمة', 'المبلغ', 'المدة', 'تاريخ الإصدار', 'الإجراءات'].map(h => <th key={h} style={thStyle}>{h}</th>)}
-                  </tr>
-                </thead>
-                <tbody>
-                  {freelancerContracts.filter(f => f.freelancerName.toLowerCase().includes(searchTerm.toLowerCase())).map((f, i) => (
-                    <tr key={i} style={{ borderBottom: '1px solid #334155' }}>
-                      <td style={{ ...tdStyle, color: '#38bdf8', fontWeight: 'bold' }}>{f.id}</td>
-                      <td style={{ ...tdStyle, fontWeight: 'bold' }}>{f.freelancerName}</td>
-                      <td style={tdStyle}>{f.projectTask}</td>
-                      <td style={{ ...tdStyle, color: '#4ade80' }}>{Number(f.amount).toLocaleString()} ر.س</td>
-                      <td style={tdStyle}>{f.duration}</td>
-                      <td style={{ ...tdStyle, color: '#cbd5e1' }}>{f.date}</td>
-                      <td style={tdStyle}>
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                          {f.fileUrl ? <button onClick={() => handleViewFile(f)} style={actionBtn}>معاينة</button> : <button onClick={() => handlePrintFreelancerContract(f)} style={actionBtn}>طباعة</button>}
-                          <button onClick={() => setFreelancerContracts(freelancerContracts.filter(x => x.id !== f.id))} style={iconDeleteBtn}><FiTrash2 /></button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-        )}
+            {/* 2. عقود الموظفين */}
+            {activeTab === 'employees' && (
+              <div>
+                {filteredEmployees.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>👥 لا توجد عقود موظفين مسجلة حالياً في الأرشيف السحابي.</div>
+                ) : (
+                  <>
+                    <div className="desktop-table-view" style={{ overflowX: 'auto' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', color: 'white', fontSize: '0.9rem', minWidth: '700px' }}>
+                        <thead>
+                          <tr style={{ background: '#0f172a', borderBottom: '1px solid #334155', color: '#94a3b8' }}>
+                            {['رقم العقد', 'المسمى الوظيفي', 'اسم الموظف', 'الراتب', 'تاريخ الأرشفة', 'الملف', 'الإجراءات'].map(h => <th key={h} style={thStyle}>{h}</th>)}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filteredEmployees.map((e, i) => (
+                            <tr key={i} style={{ borderBottom: '1px solid #334155' }}>
+                              <td style={{ ...tdStyle, color: '#38bdf8', fontWeight: 'bold' }}>{e.id}</td>
+                              <td style={{ ...tdStyle, fontWeight: 'bold' }}>{e.title}</td>
+                              <td style={tdStyle}>{e.party}</td>
+                              <td style={{ ...tdStyle, color: '#4ade80' }}>{e.value}</td>
+                              <td style={{ ...tdStyle, color: '#cbd5e1' }}>{e.date}</td>
+                              <td style={{ ...tdStyle, color: '#94a3b8' }}>{e.fileName}</td>
+                              <td style={tdStyle}>
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                  <button onClick={() => handleViewFile(e)} style={actionBtn}>معاينة الملف</button>
+                                  <button onClick={() => setEmployeeContracts(employeeContracts.filter(x => x.id !== e.id))} style={iconDeleteBtn}><FiTrash2 /></button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
 
-        {activeTab === 'general' && (
-          <div style={{ overflowX: 'auto' }}>
-            {generalDocs.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>📑 لا توجد مستندات عامة مسجلة حالياً في الأرشيف السحابي.</div>
-            ) : (
-              <table style={{ width: '100%', borderCollapse: 'collapse', color: 'white', fontSize: '0.9rem', minWidth: '700px' }}>
-                <thead>
-                  <tr style={{ background: '#0f172a', borderBottom: '1px solid #334155', color: '#94a3b8' }}>
-                    {['رقم المستند', 'عنوان المستند', 'الجهة', 'ملاحظات / مرجع', 'تاريخ الأرشفة', 'الملف', 'الإجراءات'].map(h => <th key={h} style={thStyle}>{h}</th>)}
-                  </tr>
-                </thead>
-                <tbody>
-                  {generalDocs.filter(g => g.title.toLowerCase().includes(searchTerm.toLowerCase())).map((g, i) => (
-                    <tr key={i} style={{ borderBottom: '1px solid #334155' }}>
-                      <td style={{ ...tdStyle, color: '#38bdf8', fontWeight: 'bold' }}>{g.id}</td>
-                      <td style={{ ...tdStyle, fontWeight: 'bold' }}>{g.title}</td>
-                      <td style={tdStyle}>{g.party}</td>
-                      <td style={tdStyle}>{g.value}</td>
-                      <td style={{ ...tdStyle, color: '#cbd5e1' }}>{g.date}</td>
-                      <td style={{ ...tdStyle, color: '#94a3b8' }}>{g.fileName}</td>
-                      <td style={tdStyle}>
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                          <button onClick={() => handleViewFile(g)} style={actionBtn}>معاينة الملف</button>
-                          <button onClick={() => setGeneralDocs(generalDocs.filter(x => x.id !== g.id))} style={iconDeleteBtn}><FiTrash2 /></button>
+                    <div className="mobile-cards-view" style={{ display: 'none', flexDirection: 'column', gap: '14px' }}>
+                      {filteredEmployees.map((e, i) => (
+                        <div key={i} style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ color: '#38bdf8', fontWeight: 'bold', fontSize: '0.85rem' }}>{e.id}</span>
+                            <span style={{ color: '#4ade80', fontWeight: 'bold' }}>{e.value}</span>
+                          </div>
+                          <div>
+                            <div style={{ fontSize: '1.05rem', fontWeight: 'bold', color: '#f8fafc' }}>{e.title}</div>
+                            <div style={{ fontSize: '0.9rem', color: '#94a3b8', marginTop: '2px' }}>الموظف: {e.party}</div>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: '#cbd5e1', borderTop: '1px solid #334155', paddingTop: '8px' }}>
+                            <span>التاريخ: {e.date}</span>
+                            <span>{e.fileName}</span>
+                          </div>
+                          <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                            <button onClick={() => handleViewFile(e)} style={{ ...actionBtn, flex: 1, justifyContent: 'center' }}>معاينة الملف 📄</button>
+                            <button onClick={() => setEmployeeContracts(employeeContracts.filter(x => x.id !== e.id))} style={iconDeleteBtn}><FiTrash2 /></button>
+                          </div>
                         </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
             )}
-          </div>
+
+            {/* 3. عقود المستقلين */}
+            {activeTab === 'freelancers' && (
+              <div>
+                {filteredFreelancers.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>💼 لا توجد عقود مستقلين مسجلة حالياً في الأرشيف السحابي.</div>
+                ) : (
+                  <>
+                    <div className="desktop-table-view" style={{ overflowX: 'auto' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', color: 'white', fontSize: '0.9rem', minWidth: '700px' }}>
+                        <thead>
+                          <tr style={{ background: '#0f172a', borderBottom: '1px solid #334155', color: '#94a3b8' }}>
+                            {['رقم العقد', 'اسم المستقل', 'المهمة', 'المبلغ', 'المدة', 'تاريخ الإصدار', 'الإجراءات'].map(h => <th key={h} style={thStyle}>{h}</th>)}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filteredFreelancers.map((f, i) => (
+                            <tr key={i} style={{ borderBottom: '1px solid #334155' }}>
+                              <td style={{ ...tdStyle, color: '#38bdf8', fontWeight: 'bold' }}>{f.id}</td>
+                              <td style={{ ...tdStyle, fontWeight: 'bold' }}>{f.freelancerName}</td>
+                              <td style={tdStyle}>{f.projectTask}</td>
+                              <td style={{ ...tdStyle, color: '#4ade80' }}>{Number(f.amount).toLocaleString()} ر.س</td>
+                              <td style={tdStyle}>{f.duration}</td>
+                              <td style={{ ...tdStyle, color: '#cbd5e1' }}>{f.date}</td>
+                              <td style={tdStyle}>
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                  {f.fileUrl ? <button onClick={() => handleViewFile(f)} style={actionBtn}>معاينة</button> : <button onClick={() => handlePrintFreelancerContract(f)} style={actionBtn}>طباعة</button>}
+                                  <button onClick={() => setFreelancerContracts(freelancerContracts.filter(x => x.id !== f.id))} style={iconDeleteBtn}><FiTrash2 /></button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div className="mobile-cards-view" style={{ display: 'none', flexDirection: 'column', gap: '14px' }}>
+                      {filteredFreelancers.map((f, i) => (
+                        <div key={i} style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ color: '#38bdf8', fontWeight: 'bold', fontSize: '0.85rem' }}>{f.id}</span>
+                            <span style={{ color: '#4ade80', fontWeight: 'bold' }}>{Number(f.amount).toLocaleString()} ر.س</span>
+                          </div>
+                          <div>
+                            <div style={{ fontSize: '1.05rem', fontWeight: 'bold', color: '#f8fafc' }}>{f.freelancerName}</div>
+                            <div style={{ fontSize: '0.9rem', color: '#94a3b8', marginTop: '2px' }}>المهمة: {f.projectTask}</div>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: '#cbd5e1', borderTop: '1px solid #334155', paddingTop: '8px' }}>
+                            <span>المدة: {f.duration}</span>
+                            <span>التاريخ: {f.date}</span>
+                          </div>
+                          <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                            {f.fileUrl ? (
+                              <button onClick={() => handleViewFile(f)} style={{ ...actionBtn, flex: 1, justifyContent: 'center' }}>معاينة الملف 📄</button>
+                            ) : (
+                              <button onClick={() => handlePrintFreelancerContract(f)} style={{ ...actionBtn, flex: 1, justifyContent: 'center' }}>طباعة العقد 🖨️</button>
+                            )}
+                            <button onClick={() => setFreelancerContracts(freelancerContracts.filter(x => x.id !== f.id))} style={iconDeleteBtn}><FiTrash2 /></button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* 4. المستندات العامة */}
+            {activeTab === 'general' && (
+              <div>
+                {filteredGeneral.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>📑 لا توجد مستندات عامة مسجلة حالياً في الأرشيف السحابي.</div>
+                ) : (
+                  <>
+                    <div className="desktop-table-view" style={{ overflowX: 'auto' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', color: 'white', fontSize: '0.9rem', minWidth: '700px' }}>
+                        <thead>
+                          <tr style={{ background: '#0f172a', borderBottom: '1px solid #334155', color: '#94a3b8' }}>
+                            {['رقم المستند', 'عنوان المستند', 'الجهة', 'ملاحظات / مرجع', 'تاريخ الأرشفة', 'الملف', 'الإجراءات'].map(h => <th key={h} style={thStyle}>{h}</th>)}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filteredGeneral.map((g, i) => (
+                            <tr key={i} style={{ borderBottom: '1px solid #334155' }}>
+                              <td style={{ ...tdStyle, color: '#38bdf8', fontWeight: 'bold' }}>{g.id}</td>
+                              <td style={{ ...tdStyle, fontWeight: 'bold' }}>{g.title}</td>
+                              <td style={tdStyle}>{g.party}</td>
+                              <td style={tdStyle}>{g.value}</td>
+                              <td style={{ ...tdStyle, color: '#cbd5e1' }}>{g.date}</td>
+                              <td style={{ ...tdStyle, color: '#94a3b8' }}>{g.fileName}</td>
+                              <td style={tdStyle}>
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                  <button onClick={() => handleViewFile(g)} style={actionBtn}>معاينة الملف</button>
+                                  <button onClick={() => setGeneralDocs(generalDocs.filter(x => x.id !== g.id))} style={iconDeleteBtn}><FiTrash2 /></button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div className="mobile-cards-view" style={{ display: 'none', flexDirection: 'column', gap: '14px' }}>
+                      {filteredGeneral.map((g, i) => (
+                        <div key={i} style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ color: '#38bdf8', fontWeight: 'bold', fontSize: '0.85rem' }}>{g.id}</span>
+                            <span style={{ color: '#cbd5e1', fontSize: '0.85rem' }}>{g.party}</span>
+                          </div>
+                          <div>
+                            <div style={{ fontSize: '1.05rem', fontWeight: 'bold', color: '#f8fafc' }}>{g.title}</div>
+                            <div style={{ fontSize: '0.9rem', color: '#94a3b8', marginTop: '2px' }}>مرجع: {g.value}</div>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: '#cbd5e1', borderTop: '1px solid #334155', paddingTop: '8px' }}>
+                            <span>التاريخ: {g.date}</span>
+                            <span>{g.fileName}</span>
+                          </div>
+                          <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                            <button onClick={() => handleViewFile(g)} style={{ ...actionBtn, flex: 1, justifyContent: 'center' }}>معاينة الملف 📄</button>
+                            <button onClick={() => setGeneralDocs(generalDocs.filter(x => x.id !== g.id))} style={iconDeleteBtn}><FiTrash2 /></button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </>
         )}
 
       </div>

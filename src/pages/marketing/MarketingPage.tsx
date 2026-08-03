@@ -6,14 +6,14 @@ const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzlL0sfoWhBFX
 
 export default function MarketingPage() {
   const [activeTab, setActiveTab] = useState('social'); 
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true); // تبدأ بـ true لضمان ظهور مؤشر التحميل فور الفتح
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [couponItems, setCouponItems] = useState<any[]>([]);
   const [socialItems, setSocialItems] = useState<any[]>([]);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isCouponModalOpen, setIsCouponModalOpen] = useState(false); // نافذة خاصة للكوبونات
+  const [isCouponModalOpen, setIsCouponModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   
   const [formData, setFormData] = useState({
@@ -27,7 +27,6 @@ export default function MarketingPage() {
     mediaUrl: ''
   });
 
-  // نموذج الكوبونات
   const [couponFormData, setCouponFormData] = useState({
     code: '',
     discount: '',
@@ -122,7 +121,6 @@ export default function MarketingPage() {
     setIsModalOpen(true);
   };
 
-  // حفظ الكوبون سحابياً
   const handleSaveCoupon = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!couponFormData.code || !couponFormData.discount) {
@@ -154,7 +152,6 @@ export default function MarketingPage() {
     }
   };
 
-  // تبديل حالة الكوبون مباشرة من الجدول (نشط / متوقف)
   const handleToggleCouponStatus = async (item: any) => {
     const newStatus = item.status === 'نشط' ? 'متوقف' : 'نشط';
     try {
@@ -261,6 +258,10 @@ export default function MarketingPage() {
           .desktop-table-view { display: block !important; }
           .mobile-cards-view { display: none !important; }
         }
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
       `}</style>
 
       {/* رأس الصفحة */}
@@ -277,7 +278,7 @@ export default function MarketingPage() {
 
         <div style={{ display: 'flex', gap: '10px' }}>
           <button onClick={fetchDataFromCloud} style={secondaryBtn} disabled={loading} title="مزامنة مع قوقل شيت">
-            {loading ? <FiLoader className="spin" /> : <FiRefreshCw />} مزامنة سحابية 🔄
+            <FiRefreshCw className={loading ? "spin" : ""} /> {loading ? 'جاري المزامنة...' : 'مزامنة سحابية 🔄'}
           </button>
           {activeTab === 'social' && (
             <button onClick={handleOpenAddModal} style={primaryBtn}>
@@ -401,60 +402,124 @@ export default function MarketingPage() {
       {/* الجداول التفاعلية */}
       <div style={{ background: '#1e293b', borderRadius: '16px', border: '1px solid #334155', padding: '30px', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.2)' }}>
         
-        {activeTab === 'social' && (
-          <div>
-            <h2 style={{ color: 'white', fontSize: '1.4rem', marginBottom: '15px' }}>📱 وسائل التواصل الاجتماعي وإدارة المحتوى والوسائط</h2>
-            
-            <div className="desktop-table-view" style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '950px' }}>
-                <thead>
-                  <tr style={{ background: '#0f172a', color: '#94a3b8', fontSize: '0.9rem' }}>
-                    <th style={thStyle}>المنصة والنوع</th>
-                    <th style={thStyle}>عنوان المنشور والكابشن</th>
-                    <th style={thStyle}>التاريخ</th>
-                    <th style={thStyle}>الوسائط المرفقة</th>
-                    <th style={thStyle}>الحالة التفاعلية</th>
-                    <th style={thStyle}>آخر تعديل بواسطة</th>
-                    <th style={thStyle}>الإجراءات</th>
-                  </tr>
-                </thead>
-                <tbody>
+        {loading ? (
+          <div style={{ textAlign: 'center', padding: '50px 20px', color: '#38bdf8', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+            <div style={{ width: '36px', height: '36px', border: '3px solid #334155', borderTop: '3px solid #38bdf8', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
+            <div style={{ fontSize: '1rem', fontWeight: 'bold' }}>⏳ جاري تحميل البيانات من السحابة، يرجى الانتظار...</div>
+          </div>
+        ) : (
+          <>
+            {activeTab === 'social' && (
+              <div>
+                <h2 style={{ color: 'white', fontSize: '1.4rem', marginBottom: '15px' }}>📱 وسائل التواصل الاجتماعي وإدارة المحتوى والوسائط</h2>
+                
+                <div className="desktop-table-view" style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '950px' }}>
+                    <thead>
+                      <tr style={{ background: '#0f172a', color: '#94a3b8', fontSize: '0.9rem' }}>
+                        <th style={thStyle}>المنصة والنوع</th>
+                        <th style={thStyle}>عنوان المنشور والكابشن</th>
+                        <th style={thStyle}>التاريخ</th>
+                        <th style={thStyle}>الوسائط المرفقة</th>
+                        <th style={thStyle}>الحالة التفاعلية</th>
+                        <th style={thStyle}>آخر تعديل بواسطة</th>
+                        <th style={thStyle}>الإجراءات</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {Array.isArray(socialItems) && socialItems.map((item: any, idx: number) => (
+                        <tr key={item?.id || idx} style={{ borderBottom: '1px solid #334155' }}>
+                          <td style={tdStyle}>
+                            <strong style={{ color: '#38bdf8' }}>{item?.platform || 'تيك توك'}</strong>
+                            <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>{item?.postType || 'فيديو'}</div>
+                          </td>
+                          <td style={tdStyle}>
+                            <div style={{ fontWeight: 'bold' }}>{item?.postTitle || 'بدون عنوان'}</div>
+                            <div style={{ fontSize: '0.85rem', color: '#cbd5e1', maxWidth: '280px', whiteSpace: 'pre-wrap' }}>{item?.caption || ''}</div>
+                          </td>
+                          <td style={tdStyle}>{item?.date || '-'}</td>
+                          
+                          <td style={tdStyle}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'nowrap' }}>
+                              {item?.mediaUrl ? (
+                                <>
+                                  <a href={item.mediaUrl} target="_blank" rel="noreferrer" style={{ background: '#2563eb', color: 'white', padding: '5px 8px', borderRadius: '6px', fontSize: '0.75rem', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '3px', whiteSpace: 'nowrap' }}>
+                                    <FiUpload /> معاينة
+                                  </a>
+                                  <label style={{ background: '#334155', color: '#38bdf8', border: 'none', padding: '5px 7px', borderRadius: '6px', fontSize: '0.75rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', whiteSpace: 'nowrap' }} title="تغيير الملف">
+                                    <FiEdit size={12} />
+                                    <input type="file" accept="image/*,video/*,.pdf" style={{ display: 'none' }} onChange={async (e: any) => {
+                                      const file = e.target.files?.[0];
+                                      if (file) {
+                                        const newUrl = await uploadFileToCloudinary(file);
+                                        await handleUpdateMediaInline(item, newUrl);
+                                      }
+                                    }} />
+                                  </label>
+                                  <button onClick={() => handleUpdateMediaInline(item, '')} style={{ background: '#ef4444', color: 'white', border: 'none', padding: '5px 7px', borderRadius: '6px', fontSize: '0.75rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', whiteSpace: 'nowrap' }} title="حذف الملف المرفق">
+                                    <FiX size={12} />
+                                  </button>
+                                </>
+                              ) : (
+                                <label style={{ background: '#334155', color: '#38bdf8', padding: '5px 10px', borderRadius: '6px', fontSize: '0.75rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '3px', whiteSpace: 'nowrap' }}>
+                                  <span>📥 رفع ملف</span>
+                                  <input type="file" accept="image/*,video/*,.pdf" style={{ display: 'none' }} onChange={async (e: any) => {
+                                    const file = e.target.files?.[0];
+                                    if (file) {
+                                      const newUrl = await uploadFileToCloudinary(file);
+                                      await handleUpdateMediaInline(item, newUrl);
+                                    }
+                                  }} />
+                                </label>
+                              )}
+                            </div>
+                          </td>
+
+                          <td style={tdStyle}>
+                            <select value={item?.status || 'مجدول'} onChange={(e) => handleStatusChange(item.id, e.target.value)} style={statusSelectStyle(item?.status)}>
+                              <option>مجدول</option>
+                              <option>معتمد</option>
+                              <option>نشط</option>
+                              <option>متوقف</option>
+                            </select>
+                          </td>
+                          <td style={{ ...tdStyle, fontSize: '0.8rem', color: '#94a3b8' }}>👤 {item?.updatedBy || 'النظام'}</td>
+                          <td style={tdStyle}>
+                            <div style={{ display: 'flex', gap: '6px' }}>
+                              <button onClick={() => handleOpenEditModal(item)} style={editBtn}><FiEdit2 /></button>
+                              <button onClick={() => handleDeleteItem(item.id)} style={deleteBtn}><FiTrash2 /></button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* عرض الجوال */}
+                <div className="mobile-cards-view" style={{ display: 'none', flexDirection: 'column', gap: '14px' }}>
                   {Array.isArray(socialItems) && socialItems.map((item: any, idx: number) => (
-                    <tr key={item?.id || idx} style={{ borderBottom: '1px solid #334155' }}>
-                      <td style={tdStyle}>
-                        <strong style={{ color: '#38bdf8' }}>{item?.platform || 'تيك توك'}</strong>
-                        <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>{item?.postType || 'فيديو'}</div>
-                      </td>
-                      <td style={tdStyle}>
-                        <div style={{ fontWeight: 'bold' }}>{item?.postTitle || 'بدون عنوان'}</div>
-                        <div style={{ fontSize: '0.85rem', color: '#cbd5e1', maxWidth: '280px', whiteSpace: 'pre-wrap' }}>{item?.caption || ''}</div>
-                      </td>
-                      <td style={tdStyle}>{item?.date || '-'}</td>
+                    <div key={item?.id || idx} style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ color: '#38bdf8', fontWeight: 'bold' }}>{item?.platform || 'تيك توك'} ({item?.postType || 'فيديو'})</span>
+                        <select value={item?.status || 'مجدول'} onChange={(e) => handleStatusChange(item.id, e.target.value)} style={statusSelectStyle(item?.status)}>
+                          <option>مجدول</option>
+                          <option>معتمد</option>
+                          <option>نشط</option>
+                          <option>متوقف</option>
+                        </select>
+                      </div>
+                      <div style={{ fontWeight: 'bold', fontSize: '1rem', color: '#f8fafc' }}>{item?.postTitle || 'بدون عنوان'}</div>
+                      <p style={{ fontSize: '0.85rem', color: '#cbd5e1', margin: 0, whiteSpace: 'pre-wrap' }}>{item?.caption || ''}</p>
                       
-                      <td style={tdStyle}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'nowrap' }}>
-                          {item?.mediaUrl ? (
-                            <>
-                              <a href={item.mediaUrl} target="_blank" rel="noreferrer" style={{ background: '#2563eb', color: 'white', padding: '5px 8px', borderRadius: '6px', fontSize: '0.75rem', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '3px', whiteSpace: 'nowrap' }}>
-                                <FiUpload /> معاينة
-                              </a>
-                              <label style={{ background: '#334155', color: '#38bdf8', border: 'none', padding: '5px 7px', borderRadius: '6px', fontSize: '0.75rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', whiteSpace: 'nowrap' }} title="تغيير الملف">
-                                <FiEdit size={12} />
-                                <input type="file" accept="image/*,video/*,.pdf" style={{ display: 'none' }} onChange={async (e: any) => {
-                                  const file = e.target.files?.[0];
-                                  if (file) {
-                                    const newUrl = await uploadFileToCloudinary(file);
-                                    await handleUpdateMediaInline(item, newUrl);
-                                  }
-                                }} />
-                              </label>
-                              <button onClick={() => handleUpdateMediaInline(item, '')} style={{ background: '#ef4444', color: 'white', border: 'none', padding: '5px 7px', borderRadius: '6px', fontSize: '0.75rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', whiteSpace: 'nowrap' }} title="حذف الملف المرفق">
-                                <FiX size={12} />
-                              </button>
-                            </>
-                          ) : (
-                            <label style={{ background: '#334155', color: '#38bdf8', padding: '5px 10px', borderRadius: '6px', fontSize: '0.75rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '3px', whiteSpace: 'nowrap' }}>
-                              <span>📥 رفع ملف</span>
+                      <div style={{ display: 'flex', gap: '4px', alignItems: 'center', flexWrap: 'nowrap' }}>
+                        {item?.mediaUrl ? (
+                          <>
+                            <a href={item.mediaUrl} target="_blank" rel="noreferrer" style={{ background: '#2563eb', color: 'white', padding: '5px 8px', borderRadius: '6px', fontSize: '0.75rem', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '3px', whiteSpace: 'nowrap' }}>
+                              <FiUpload /> معاينة
+                            </a>
+                            <label style={{ background: '#334155', color: '#38bdf8', padding: '5px 7px', borderRadius: '6px', fontSize: '0.75rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', whiteSpace: 'nowrap' }}>
+                              <FiEdit size={12} />
                               <input type="file" accept="image/*,video/*,.pdf" style={{ display: 'none' }} onChange={async (e: any) => {
                                 const file = e.target.files?.[0];
                                 if (file) {
@@ -463,149 +528,94 @@ export default function MarketingPage() {
                                 }
                               }} />
                             </label>
-                          )}
-                        </div>
-                      </td>
+                            <button onClick={() => handleUpdateMediaInline(item, '')} style={{ background: '#ef4444', color: 'white', border: 'none', padding: '5px 7px', borderRadius: '6px', fontSize: '0.75rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', whiteSpace: 'nowrap' }}>
+                              <FiX size={12} />
+                            </button>
+                          </>
+                        ) : (
+                          <label style={{ background: '#334155', color: '#38bdf8', padding: '5px 10px', borderRadius: '6px', fontSize: '0.75rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                            📥 رفع ملف
+                            <input type="file" accept="image/*,video/*,.pdf" style={{ display: 'none' }} onChange={async (e: any) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                const newUrl = await uploadFileToCloudinary(file);
+                                await handleUpdateMediaInline(item, newUrl);
+                              }
+                            }} />
+                          </label>
+                        )}
+                      </div>
 
-                      <td style={tdStyle}>
-                        <select value={item?.status || 'مجدول'} onChange={(e) => handleStatusChange(item.id, e.target.value)} style={statusSelectStyle(item?.status)}>
-                          <option>مجدول</option>
-                          <option>معتمد</option>
-                          <option>نشط</option>
-                          <option>متوقف</option>
-                        </select>
-                      </td>
-                      <td style={{ ...tdStyle, fontSize: '0.8rem', color: '#94a3b8' }}>👤 {item?.updatedBy || 'النظام'}</td>
-                      <td style={tdStyle}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #334155', paddingTop: '8px', fontSize: '0.8rem', color: '#94a3b8' }}>
+                        <span>📅 {item?.date || '-'} | 👤 {item?.updatedBy || 'النظام'}</span>
                         <div style={{ display: 'flex', gap: '6px' }}>
                           <button onClick={() => handleOpenEditModal(item)} style={editBtn}><FiEdit2 /></button>
                           <button onClick={() => handleDeleteItem(item.id)} style={deleteBtn}><FiTrash2 /></button>
                         </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* عرض الجوال */}
-            <div className="mobile-cards-view" style={{ display: 'none', flexDirection: 'column', gap: '14px' }}>
-              {Array.isArray(socialItems) && socialItems.map((item: any, idx: number) => (
-                <div key={item?.id || idx} style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ color: '#38bdf8', fontWeight: 'bold' }}>{item?.platform || 'تيك توك'} ({item?.postType || 'فيديو'})</span>
-                    <select value={item?.status || 'مجدول'} onChange={(e) => handleStatusChange(item.id, e.target.value)} style={statusSelectStyle(item?.status)}>
-                      <option>مجدول</option>
-                      <option>معتمد</option>
-                      <option>نشط</option>
-                      <option>متوقف</option>
-                    </select>
-                  </div>
-                  <div style={{ fontWeight: 'bold', fontSize: '1rem', color: '#f8fafc' }}>{item?.postTitle || 'بدون عنوان'}</div>
-                  <p style={{ fontSize: '0.85rem', color: '#cbd5e1', margin: 0, whiteSpace: 'pre-wrap' }}>{item?.caption || ''}</p>
-                  
-                  <div style={{ display: 'flex', gap: '4px', alignItems: 'center', flexWrap: 'nowrap' }}>
-                    {item?.mediaUrl ? (
-                      <>
-                        <a href={item.mediaUrl} target="_blank" rel="noreferrer" style={{ background: '#2563eb', color: 'white', padding: '5px 8px', borderRadius: '6px', fontSize: '0.75rem', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '3px', whiteSpace: 'nowrap' }}>
-                          <FiUpload /> معاينة
-                        </a>
-                        <label style={{ background: '#334155', color: '#38bdf8', padding: '5px 7px', borderRadius: '6px', fontSize: '0.75rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', whiteSpace: 'nowrap' }}>
-                          <FiEdit size={12} />
-                          <input type="file" accept="image/*,video/*,.pdf" style={{ display: 'none' }} onChange={async (e: any) => {
-                            const file = e.target.files?.[0];
-                            if (file) {
-                              const newUrl = await uploadFileToCloudinary(file);
-                              await handleUpdateMediaInline(item, newUrl);
-                            }
-                          }} />
-                        </label>
-                        <button onClick={() => handleUpdateMediaInline(item, '')} style={{ background: '#ef4444', color: 'white', border: 'none', padding: '5px 7px', borderRadius: '6px', fontSize: '0.75rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', whiteSpace: 'nowrap' }}>
-                          <FiX size={12} />
-                        </button>
-                      </>
-                    ) : (
-                      <label style={{ background: '#334155', color: '#38bdf8', padding: '5px 10px', borderRadius: '6px', fontSize: '0.75rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                        📥 رفع ملف
-                        <input type="file" accept="image/*,video/*,.pdf" style={{ display: 'none' }} onChange={async (e: any) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            const newUrl = await uploadFileToCloudinary(file);
-                            await handleUpdateMediaInline(item, newUrl);
-                          }
-                        }} />
-                      </label>
-                    )}
-                  </div>
-
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #334155', paddingTop: '8px', fontSize: '0.8rem', color: '#94a3b8' }}>
-                    <span>📅 {item?.date || '-'} | 👤 {item?.updatedBy || 'النظام'}</span>
-                    <div style={{ display: 'flex', gap: '6px' }}>
-                      <button onClick={() => handleOpenEditModal(item)} style={editBtn}><FiEdit2 /></button>
-                      <button onClick={() => handleDeleteItem(item.id)} style={deleteBtn}><FiTrash2 /></button>
+                      </div>
                     </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-          </div>
-        )}
-
-        {activeTab === 'campaigns' && (
-          <div>
-            <h2 style={{ color: 'white', fontSize: '1.4rem', marginBottom: '15px' }}>🏷️ حملات النمو والكوبونات (مربوطة مع قوقل شيت)</h2>
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '600px' }}>
-                <thead>
-                  <tr style={{ background: '#0f172a', color: '#94a3b8', fontSize: '0.9rem' }}>
-                    <th style={thStyle}>كود الخصم</th>
-                    <th style={thStyle}>نسبة الخصم</th>
-                    <th style={thStyle}>الحالة السحابية</th>
-                    <th style={thStyle}>الإجراءات السريعة (تنشيط / إيقاف)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {Array.isArray(couponItems) && couponItems.map((item: any, idx: number) => (
-                    <tr key={idx} style={{ borderBottom: '1px solid #334155' }}>
-                      <td style={{ ...tdStyle, color: '#38bdf8', fontWeight: 'bold' }}>{item?.code || ''}</td>
-                      <td style={tdStyle}>{item?.discount || ''}</td>
-                      <td style={tdStyle}>
-                        <span style={{ padding: '4px 10px', borderRadius: '6px', background: item?.status === 'نشط' ? '#065f46' : '#b45309', color: 'white', fontSize: '0.8rem', fontWeight: 'bold' }}>
-                          {item?.status || 'نشط'}
-                        </span>
-                      </td>
-                      <td style={tdStyle}>
-                        <button onClick={() => handleToggleCouponStatus(item)} style={{ background: item?.status === 'نشط' ? '#b45309' : '#065f46', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '6px', fontSize: '0.8rem', cursor: 'pointer', fontWeight: 'bold' }}>
-                          {item?.status === 'نشط' ? 'إيقاف الكوبون ⏹️' : 'تنشيط الكوبون ▶️'}
-                        </button>
-                      </td>
-                    </tr>
                   ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'calendar' && (
-          <div>
-            <h2 style={{ color: 'white', fontSize: '1.4rem', marginBottom: '15px' }}>📅 التقويم التسويقي المنهجي والموحد</h2>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '15px' }}>
-              {Array.isArray(socialItems) && socialItems.map((s: any, idx: number) => (
-                <div key={idx} style={{ background: '#1a2638', padding: '14px', borderRadius: '10px', borderLeft: '4px solid #3b82f6', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: '0.8rem', color: '#38bdf8', fontWeight: 'bold' }}>📱 {s?.platform || 'تيك توك'} ({s?.date || '-'})</span>
-                    <span style={{ padding: '3px 8px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 'bold', background: s?.status === 'نشط' || s?.status === 'معتمد' ? '#065f46' : '#b45309', color: 'white' }}>
-                      {s?.status || 'مجدول'}
-                    </span>
-                  </div>
-                  <h4 style={{ color: 'white', margin: '4px 0', fontSize: '0.95rem' }}>{s?.postTitle || ''}</h4>
-                  <p style={{ color: '#94a3b8', fontSize: '0.8rem', margin: 0 }}>{s?.caption || ''}</p>
                 </div>
-              ))}
-            </div>
-          </div>
+
+              </div>
+            )}
+
+            {activeTab === 'campaigns' && (
+              <div>
+                <h2 style={{ color: 'white', fontSize: '1.4rem', marginBottom: '15px' }}>🏷️ حملات النمو والكوبونات (مربوطة مع قوقل شيت)</h2>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '600px' }}>
+                    <thead>
+                      <tr style={{ background: '#0f172a', color: '#94a3b8', fontSize: '0.9rem' }}>
+                        <th style={thStyle}>كود الخصم</th>
+                        <th style={thStyle}>نسبة الخصم</th>
+                        <th style={thStyle}>الحالة السحابية</th>
+                        <th style={thStyle}>الإجراءات السريعة (تنشيط / إيقاف)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {Array.isArray(couponItems) && couponItems.map((item: any, idx: number) => (
+                        <tr key={idx} style={{ borderBottom: '1px solid #334155' }}>
+                          <td style={{ ...tdStyle, color: '#38bdf8', fontWeight: 'bold' }}>{item?.code || ''}</td>
+                          <td style={tdStyle}>{item?.discount || ''}</td>
+                          <td style={tdStyle}>
+                            <span style={{ padding: '4px 10px', borderRadius: '6px', background: item?.status === 'نشط' ? '#065f46' : '#b45309', color: 'white', fontSize: '0.8rem', fontWeight: 'bold' }}>
+                              {item?.status || 'نشط'}
+                            </span>
+                          </td>
+                          <td style={tdStyle}>
+                            <button onClick={() => handleToggleCouponStatus(item)} style={{ background: item?.status === 'نشط' ? '#b45309' : '#065f46', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '6px', fontSize: '0.8rem', cursor: 'pointer', fontWeight: 'bold' }}>
+                              {item?.status === 'نشط' ? 'إيقاف الكوبون ⏹️' : 'تنشيط الكوبون ▶️'}
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'calendar' && (
+              <div>
+                <h2 style={{ color: 'white', fontSize: '1.4rem', marginBottom: '15px' }}>📅 التقويم التسويقي المنهجي والموحد</h2>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '15px' }}>
+                  {Array.isArray(socialItems) && socialItems.map((s: any, idx: number) => (
+                    <div key={idx} style={{ background: '#1a2638', padding: '14px', borderRadius: '10px', borderLeft: '4px solid #3b82f6', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: '0.8rem', color: '#38bdf8', fontWeight: 'bold' }}>📱 {s?.platform || 'تيك توك'} ({s?.date || '-'})</span>
+                        <span style={{ padding: '3px 8px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 'bold', background: s?.status === 'نشط' || s?.status === 'معتمد' ? '#065f46' : '#b45309', color: 'white' }}>
+                          {s?.status || 'مجدول'}
+                        </span>
+                      </div>
+                      <h4 style={{ color: 'white', margin: '4px 0', fontSize: '0.95rem' }}>{s?.postTitle || ''}</h4>
+                      <p style={{ color: '#94a3b8', fontSize: '0.8rem', margin: 0 }}>{s?.caption || ''}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
         )}
 
       </div>

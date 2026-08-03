@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { getOrders, updateOrderStatus } from '@/services/dbService';
-import { FiSearch } from 'react-icons/fi';
+import { FiSearch, FiPlus } from 'react-icons/fi';
 
 const statuses = ['جديد', 'تحت الإجراء', 'لم يتم الرد', 'تم التواصل', 'تم التعاقد', 'تم التنفيذ', 'مغلق'];
 
@@ -17,7 +17,20 @@ export default function LeadsPage() {
   const [selectedClient, setSelectedClient] = useState<any>(null);
   const [pendingStatus, setPendingStatus] = useState<string>('');
   const [noteInput, setNoteInput] = useState<string>('');
-  const [isSubmitting, setIsSubmitting] = useState(false); // ⏳ حالة الإرسال والانتظار لمنع التكرار
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // حالات نافذة الإضافة اليدوية للعميل المحتمل
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [newLead, setNewLead] = useState({
+    customerName: '',
+    email: '',
+    whatsapp: '',
+    socials: '',
+    packageName: '',
+    details: '',
+    price: '',
+    status: 'جديد'
+  });
 
   // استخراج اسم المستخدم (Username) الحقيقي للموظف المسجل دخول حالياً
   const getCurrentUsername = () => {
@@ -50,7 +63,8 @@ export default function LeadsPage() {
       const records = Array.isArray(data) ? data
         .filter((item: any) => {
           const status = (item.status || 'جديد').trim();
-          return status === 'جديد' || status === 'مغلق' || status === '' || status === 'تحت الإجراء' || status === 'تم التواصل';
+          // عرض الحالات الخاصة بالعملاء المحتملين فقط (الجديد - لم يتم الرد) وما يشابهها
+          return status === 'جديد' || status === 'لم يتم الرد' || status === '' || status === 'تحت الإجراء' || status === 'تم التواصل';
         })
         .map((item: any, index: number) => ({
           id: item.orderId || item.id || index,
@@ -62,15 +76,66 @@ export default function LeadsPage() {
           socialMedia: item.socials || item.socialMedia || item.social || '-',
           packageName: item.packageName || item.package || item.serviceName || item.orderType || '-',
           details: item.details || item.orderDescription || item.description || item.requestDetails || item.orderNotes || '-',
-          value: item.price || item.amount || item.value || '0',
+          value: String(item.price || item.amount || item.value || '0').replace(/ر\.س/g, '').trim(),
           notes: item.notes || item.details || 'لا توجد ملاحظات سابقة',
           status: item.status || 'جديد',
-        })) : [];
+          createdAt: item.createdAt || new Date().toISOString()
+        }))
+        // ترتيب العناصر بحيث يصعد الجديد أو المضاف حديثاً لأعلى القائمة
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()) : [];
+        
       setClients(records);
     } catch (error) {
       console.error("خطأ في جلب العملاء من قوقل شيت:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // معالجة الإضافة اليدوية لعميل محتمل جديد
+  const handleAddManualLead = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isSubmitting) return;
+
+    try {
+      setIsSubmitting(true);
+      const newOrderId = `ORD-${Math.floor(100000 + Math.random() * 900000)}`;
+      const timestamp = new Date().toLocaleString('ar-SA');
+      const creationNote = `[${timestamp}] تمت اضافته يدوياً بواسطة الموظف @${currentEmployee}`;
+
+      const leadData = {
+        action: 'create',
+        orderId: newOrderId,
+        packageName: newLead.packageName || 'باقة عامة',
+        price: String(newLead.price || '0').replace(/ر\.س/g, '').trim(),
+        customerName: newLead.customerName,
+        email: newLead.email || '-',
+        whatsapp: newLead.whatsapp || '-',
+        socials: newLead.socials || '-',
+        details: newLead.details || '-',
+        status: newLead.status || 'جديد',
+        lastContactedBy: currentEmployee,
+        notes: creationNote
+      };
+
+      const response = await fetch('https://script.google.com/macros/s/AKfycbzlL0sfoWhBFXXoLd9ZiPu6boq9WvLlalu4_kf6DkXMdQtmf-XMM32Hxrq0TzFPga3K/exec', {
+        method: 'POST',
+        body: JSON.stringify(leadData)
+      });
+
+      if (response.ok) {
+        setIsAddModalOpen(false);
+        setNewLead({ customerName: '', email: '', whatsapp: '', socials: '', packageName: '', details: '', price: '', status: 'جديد' });
+        await loadClients();
+        alert("تم إضافة العميل المحتمل يدوياً بنجاح وصعد إلى أعلى القائمة!");
+      } else {
+        throw new Error("فشل الاتصال بالسيرفر");
+      }
+    } catch (error) {
+      console.error("خطأ في إضافة العميل يدوياً:", error);
+      alert("حدث خطأ أثناء الإضافة، حاول مرة أخرى.");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -87,7 +152,7 @@ export default function LeadsPage() {
     if (!selectedClient || isSubmitting) return;
 
     try {
-      setIsSubmitting(true); // تفعيل مؤشر الانتظار وتعطل الأزرار فوراً لمنع التكرار
+      setIsSubmitting(true);
       const timestamp = new Date().toLocaleString('ar-SA');
       const formattedNote = `[${timestamp}] @${currentEmployee} غير الحالة إلى (${pendingStatus})${noteInput ? `: ${noteInput}` : ''}`;
       
@@ -100,12 +165,12 @@ export default function LeadsPage() {
       setIsModalOpen(false);
       setSelectedClient(null);
       await loadClients();
-      alert("تم تحديث الحالة وتسجيل الملاحظة بنجاح!");
+      alert("تم تحديث الحالة بنجاح ونقل العميل بناءً على حالته الجديدة!");
     } catch (error) {
       console.error("خطأ أثناء تحديث الحالة:", error);
       alert("فشل تحديث الحالة، حاول مرة أخرى.");
     } finally {
-      setIsSubmitting(false); // إعادة تعيين حالة الانتظار بعد الانتهاء
+      setIsSubmitting(false);
     }
   };
 
@@ -126,7 +191,6 @@ export default function LeadsPage() {
   return (
     <div style={{ padding: '24px', background: '#0f172a', minHeight: '100vh', color: 'white', fontFamily: 'Cairo, sans-serif', boxSizing: 'border-box' }}>
       
-      {/* حقن قواعد الاستجابة الذكية (Media Queries) */}
       <style>{`
         @media (max-width: 900px) {
           .desktop-table-view { display: none !important; }
@@ -138,18 +202,22 @@ export default function LeadsPage() {
         }
       `}</style>
 
-      {/* رأس الصفحة وزر التحديث */}
+      {/* رأس الصفحة وزر التحديث والإضافة اليدوية */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '15px' }}>
         <div>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 'bold', margin: 0 }}>العملاء المحتملين</h1>
           <p style={{ color: '#94a3b8', fontSize: '0.85rem', margin: '4px 0 0 0' }}>إدارة الطلبات الجديدة ومتابعتها بلحظية</p>
         </div>
-        <button onClick={loadClients} style={primaryBtn}>تحديث البيانات 🔄</button>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button onClick={() => setIsAddModalOpen(true)} style={{ ...primaryBtn, background: '#10b981', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <FiPlus /> إضافة عميل محتمل 
+          </button>
+          <button onClick={loadClients} style={primaryBtn}>تحديث البيانات 🔄</button>
+        </div>
       </div>
 
       {/* شريط البحث والفلترة الذكية */}
       <div style={{ display: 'flex', gap: '15px', marginBottom: '20px', flexWrap: 'wrap', background: '#1e293b', padding: '15px', borderRadius: '12px', border: '1px solid #334155', alignItems: 'center' }}>
-        
         <div style={{ position: 'relative', flex: 1, minWidth: '260px' }}>
           <FiSearch style={{ position: 'absolute', right: '14px', top: '13px', color: '#94a3b8' }} />
           <input 
@@ -171,7 +239,6 @@ export default function LeadsPage() {
             {statuses.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
         </div>
-
       </div>
 
       {loading ? (
@@ -262,7 +329,6 @@ export default function LeadsPage() {
 
                 return (
                   <div key={c.id} style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '14px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
-                    
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span style={{ background: '#0f172a', color: '#38bdf8', padding: '4px 10px', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 'bold', border: '1px solid #334155' }}>
                         {c.orderId}
@@ -294,7 +360,6 @@ export default function LeadsPage() {
                         {c.details}
                       </div>
                     )}
-
                   </div>
                 );
               })
@@ -307,7 +372,110 @@ export default function LeadsPage() {
         </>
       )}
 
-      {/* نافذة التوثيق عند تغيير الحالة (مع تفعيل اشعار الانتظار والتعطيل) */}
+      {/* نافذة الإضافة اليدوية لعميل محتمل */}
+      {isAddModalOpen && (
+        <div style={modalOverlay}>
+          <form onSubmit={handleAddManualLead} style={modalContent}>
+            <h3 style={{ marginTop: 0, color: '#1e293b' }}>إضافة عميل محتمل يدوياً ➕</h3>
+            <p style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '15px' }}>
+              سيتم تسجيل العميل الجديد وتوثيق اسمك كمسؤول عن إضافته.
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '60vh', overflowY: 'auto', paddingLeft: '4px' }}>
+              <div>
+                <label style={labelStyle}>اسم العميل / الشركة *</label>
+                <input 
+                  type="text" 
+                  required
+                  value={newLead.customerName}
+                  onChange={(e) => setNewLead({...newLead, customerName: e.target.value})}
+                  placeholder="أدخل اسم العميل..."
+                  style={inputStyle}
+                />
+              </div>
+
+              <div>
+                <label style={labelStyle}>البريد الإلكتروني</label>
+                <input 
+                  type="email5" 
+                  value={newLead.email}
+                  onChange={(e) => setNewLead({...newLead, email: e.target.value})}
+                  placeholder="example@domain.com"
+                  style={inputStyle}
+                />
+              </div>
+
+              <div>
+                <label style={labelStyle}>رقم الجوال / الواتساب *</label>
+                <input 
+                  type="text" 
+                  required
+                  value={newLead.whatsapp}
+                  onChange={(e) => setNewLead({...newLead, whatsapp: e.target.value})}
+                  placeholder="0500000000"
+                  style={inputStyle}
+                />
+              </div>
+
+              <div>
+                <label style={labelStyle}>حسابات السوشل ميديا</label>
+                <input 
+                  type="text" 
+                  value={newLead.socials}
+                  onChange={(e) => setNewLead({...newLead, socials: e.target.value})}
+                  placeholder="تويتر، انستقرام..."
+                  style={inputStyle}
+                />
+              </div>
+
+              <div>
+                <label style={labelStyle}>نوع الباقة أو الخدمة *</label>
+                <input 
+                  type="text" 
+                  required
+                  value={newLead.packageName}
+                  onChange={(e) => setNewLead({...newLead, packageName: e.target.value})}
+                  placeholder="مثال: باقة الإنتاج المرئي"
+                  style={inputStyle}
+                />
+              </div>
+
+              <div>
+                <label style={labelStyle}>القيمة المتوقعة (ر.س)</label>
+                <input 
+                  type="number" 
+                  value={newLead.price}
+                  onChange={(e) => setNewLead({...newLead, price: e.target.value})}
+                  placeholder="1500"
+                  style={inputStyle}
+                />
+              </div>
+
+              <div>
+                <label style={labelStyle}>تفاصيل الطلب أو الملاحظات</label>
+                <textarea 
+                  rows={3}
+                  value={newLead.details}
+                  onChange={(e) => setNewLead({...newLead, details: e.target.value})}
+                  placeholder="تفاصيل إضافية عن رغبة العميل..."
+                  style={textareaStyle}
+                />
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '10px', marginTop: '15px', justifyContent: 'flex-end' }}>
+              <button type="submit" style={{ ...primaryBtn, opacity: isSubmitting ? 0.7 : 1 }} disabled={isSubmitting}>
+                {isSubmitting ? '⏳ جاري الحفظ...' : 'إضافة وحفظ ✅'}
+              </button>
+              <button type="button" onClick={() => setIsAddModalOpen(false)} style={secondaryBtn} disabled={isSubmitting}>
+                إلغاء ❌
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* نافذة التوثيق عند تغيير الحالة */}
       {isModalOpen && (
         <div style={modalOverlay}>
           <form onSubmit={handleConfirmUpdate} style={modalContent}>
@@ -330,10 +498,10 @@ export default function LeadsPage() {
             />
 
             <div style={{ display: 'flex', gap: '10px', marginTop: '15px', justifyContent: 'flex-end' }}>
-              <button type="submit" style={{ ...primaryBtn, opacity: isSubmitting ? 0.7 : 1, cursor: isSubmitting ? 'not-allowed' : 'pointer' }} disabled={isSubmitting}>
+              <button type="submit" style={{ ...primaryBtn, opacity: isSubmitting ? 0.7 : 1 }} disabled={isSubmitting}>
                 {isSubmitting ? '⏳ جاري الحفظ والتحديث...' : 'حفظ وتحديث ✅'}
               </button>
-              <button type="button" onClick={() => setIsModalOpen(false)} style={{ ...secondaryBtn, opacity: isSubmitting ? 0.5 : 1 }} disabled={isSubmitting}>
+              <button type="button" onClick={() => setIsModalOpen(false)} style={secondaryBtn} disabled={isSubmitting}>
                 إلغاء ❌
               </button>
             </div>
@@ -348,6 +516,8 @@ const thStyle = { padding: '12px 14px', textAlign: 'right' as const, color: '#94
 const tdStyle = { padding: '12px 14px', textAlign: 'right' as const, verticalAlign: 'middle' as const };
 const primaryBtn = { background: '#2563eb', color: 'white', padding: '8px 16px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.9rem' };
 const secondaryBtn = { background: '#64748b', color: 'white', padding: '8px 16px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontSize: '0.9rem' };
-const textareaStyle = { width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.9rem', boxSizing: 'border-box' as const, color: '#1e293b' };
+const labelStyle = { display: 'block', fontSize: '0.82rem', marginBottom: '4px', fontWeight: 'bold', color: '#1e293b' };
+const inputStyle = { width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.9rem', boxSizing: 'border-box' as const, color: '#1e293b', outline: 'none' };
+const textareaStyle = { width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.9rem', boxSizing: 'border-box' as const, color: '#1e293b', outline: 'none' };
 const modalOverlay = { position: 'fixed' as const, top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 2000, padding: '16px' };
 const modalContent = { background: 'white', color: '#1e293b', padding: '24px', borderRadius: '16px', width: '100%', maxWidth: '450px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.3)' };

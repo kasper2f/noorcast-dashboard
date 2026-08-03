@@ -60,7 +60,8 @@ export default function ActiveClientsPage() {
       const records = Array.isArray(data) ? data
         .filter((item: any) => {
           const status = (item.status || '').trim();
-          return status !== 'جديد' && status !== 'مغلق' && status !== '';
+          // استبعاد الجديد والمغلق، وأيضاً استبعاد "تم التنفيذ" لكي تنتقل لقائمة العملاء (الأرشيف)
+          return status !== 'جديد' && status !== '' && status !== 'مغلق' && status !== 'تم التنفيذ';
         })
         .map((item: any, index: number) => ({
           id: item.orderId || item.id || index,
@@ -71,8 +72,11 @@ export default function ActiveClientsPage() {
           value: cleanValue(item.price || item.amount || item.value || '0'),
           assignedEmployee: item.lastContactedBy || item.assignedEmployee || 'النظام',
           notes: item.notes || item.details || 'لا توجد ملاحظات سابقة',
-          status: item.status || 'تحت الإجراء'
-        })) : [];
+          status: item.status || 'تحت الإجراء',
+          createdAt: item.createdAt || new Date().toISOString()
+        }))
+        // الترتيب التنازلي بحيث يصعد الطلب المحدث أو الجديد لأعلى الجدول فوراً
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()) : [];
 
       setActiveClients(records);
     } catch (error) {
@@ -139,7 +143,7 @@ export default function ActiveClientsPage() {
       setIsModalOpen(false);
       setSelectedClient(null);
       loadActiveClients();
-      alert("تم تحديث الحالة وترحيل المشروع بكافة ملاحظاته بنجاح! 🚀");
+      alert("تم تحديث الحالة وترحيل التحديثات بنجاح وصعد الطلب لأعلى الجدول!");
     } catch (error) {
       console.error("خطأ أثناء التحديث:", error);
       alert("فشل التحديث، حاول مرة أخرى.");
@@ -161,7 +165,7 @@ export default function ActiveClientsPage() {
 
       await updateOrderStatus(client.id, client.status, currentEmployee, finalNotes);
       loadActiveClients();
-      alert("تمت إضافة الملاحظة بنجاح!");
+      alert("تمت إضافة الملاحظة بنجاح وصعد الطلب لأعلى القائمة!");
     } catch (error) {
       console.error("خطأ أثناء إضافة الملاحظة:", error);
       alert("فشل الحفظ.");
@@ -184,7 +188,6 @@ export default function ActiveClientsPage() {
   return (
     <div style={{ padding: '24px', background: '#0f172a', minHeight: '100vh', color: 'white', fontFamily: 'Cairo, sans-serif', boxSizing: 'border-box' }}>
       
-      {/* حقن قواعد الاستجابة الذكية (Media Queries) للعرض المزدوج */}
       <style>{`
         @media (max-width: 900px) {
           .desktop-table-view { display: none !important; }
@@ -199,7 +202,7 @@ export default function ActiveClientsPage() {
       {/* رأس الصفحة وزر التحديث */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '15px' }}>
         <div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 'bold', margin: 0 }}>العملاء الفعليين (Audit Trail)</h1>
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 'bold', margin: 0 }}>العملاء الفعليين</h1>
           <p style={{ color: '#94a3b8', fontSize: '0.85rem', margin: '4px 0 0 0' }}>متابعة العملاء الفعليين وسجل المتابعة اللحظي</p>
         </div>
         <button onClick={loadActiveClients} style={primaryBtn}>تحديث البيانات 🔄</button>

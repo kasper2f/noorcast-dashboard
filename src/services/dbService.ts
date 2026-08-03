@@ -4,6 +4,10 @@ import { getMessaging, getToken, onMessage } from 'firebase/messaging';
 // رابط الـ Web App الخاص بـ Google Sheets السحابي
 const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzlL0sfoWhBFXXoLd9ZiPu6boq9WvLlalu4_kf6DkXMdQtmf-XMM32Hxrq0TzFPga3K/exec';
 
+// 🛡️ ذاكرة مؤقتة محلية لمنع اختفاء البيانات وتذبذب الشاشات (In-Memory Fallback Cache)
+const memoryCache: { [key: string]: { data: any, timestamp: number } } = {};
+const CACHE_TTL = 5 * 60 * 1000; // 5 دقائق صلاحية افتراضية كحماية قصوى
+
 // إعدادات Firebase المشتركة
 const firebaseConfig = {
   apiKey: "AIzaSyBuASn2zREWSf9w4klqsrkn_IsUiOoM8hc",
@@ -17,12 +21,52 @@ const firebaseConfig = {
 
 export const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
+/**
+ * دالة ذكية للتعامل مع البيانات والاحتفاظ بآخر نسخة ناجحة في حال حدوث تذبذب أو فراغ مؤقت
+ */
 const validateAndAlertEmptyData = (data: any, tabName: string) => {
   const isEmpty = !data || (Array.isArray(data) && data.length === 0) || (typeof data === 'object' && Object.keys(data).length === 0);
+  
   if (isEmpty) {
+    // إذا عادت البيانات فارغة، نتحقق هل لدينا نسخة سابقة سليمة في الذاكرة المؤقتة لنعرضها بدل إظهار "لا توجد بيانات"
+    if (memoryCache[tabName] && memoryCache[tabName].data) {
+      console.warn(`⚠️ تذبذب في سحابة قوقل: تبويب [${tabName}] أعاد بيانات فارغة، وتم استرجاع آخر نسخة ناجحة تلقائياً.`);
+      return memoryCache[tabName].data;
+    }
     console.warn(`⚠️ تنبيه: تبويب أو جدول [${tabName}] فارغ تماماً ولا يحتوي على بيانات.`);
+    return data;
   }
+
+  // تخزين النسخة الناجحة في الذاكرة المؤقتة
+  memoryCache[tabName] = {
+    data: data,
+    timestamp: Date.now()
+  };
+
   return data;
+};
+
+/**
+ * دالة مساعدة لعمل Fetch آمن مع Fallback للذاكرة المؤقتة عند انقطاع الاتصال أو بطء السيرفر
+ */
+const safeFetchFromSheet = async (actionQuery: string, tabName: string, fallbackValue: any = []) => {
+  try {
+    const response = await fetch(`${GOOGLE_SCRIPT_URL}?action=${actionQuery}&_t=${Date.now()}`);
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+    
+    const data = await response.json();
+    return validateAndAlertEmptyData(data, tabName);
+  } catch (error) {
+    console.error(`خطأ في جلب بيانات [${tabName}]:`, error);
+    
+    // إذا فشل الاتصال بالكامل، نعيد آخر بيانات ناجحة من الذاكرة بدلاً من تدمير الواجهة
+    if (memoryCache[tabName] && memoryCache[tabName].data) {
+      console.log(`📦 تم تحميل بيانات [${tabName}] من الذاكرة المحلية المؤقتة نظراً لتعذر الاتصال السحابي.`);
+      return memoryCache[tabName].data;
+    }
+    
+    return fallbackValue;
+  }
 };
 
 export const requestNotificationPermission = async () => {
@@ -159,7 +203,6 @@ export const logDashboardAction = async (action: string, target: string, details
       }
     }
 
-    // 🚀 إطلاق تنبيه مرئي فوري داخل الداشبورد لمكون Toast
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('dashboard-activity', {
         detail: { action, target, details: `${details} (بواسطة: @${username})` }
@@ -185,27 +228,8 @@ export const logDashboardAction = async (action: string, target: string, details
   }
 };
 
-export const getAuditLogs = async () => {
-  try {
-    const response = await fetch(GOOGLE_SCRIPT_URL + '?action=getAuditLogs&_t=' + Date.now());
-    const data = await response.json();
-    return validateAndAlertEmptyData(data, 'AuditLogs');
-  } catch (error) {
-    console.error("Error fetching audit logs:", error);
-    return [];
-  }
-};
-
-export const getHRActionLogs = async () => {
-  try {
-    const response = await fetch(GOOGLE_SCRIPT_URL + '?action=getHRActionLogs&_t=' + Date.now());
-    const data = await response.json();
-    return validateAndAlertEmptyData(data, 'HRActionLogs');
-  } catch (error) {
-    console.error("Error fetching HR action logs:", error);
-    return [];
-  }
-};
+export const getAuditLogs = async () => safeFetchFromSheet('getAuditLogs', 'AuditLogs');
+export const getHRActionLogs = async () => safeFetchFromSheet('getHRActionLogs', 'HRActionLogs');
 
 export const updateEmployeeStatusInSheet = async (username: string, newStatus: string) => {
   try {
@@ -279,16 +303,7 @@ export const submitAdministrativeAction = async (actionData: {
   }
 };
 
-export const getOrders = async () => {
-  try {
-    const response = await fetch(GOOGLE_SCRIPT_URL + '?action=get&_t=' + Date.now());
-    const data = await response.json();
-    return validateAndAlertEmptyData(data, 'Orders');
-  } catch (error) {
-    console.error("Error fetching orders in dashboard:", error);
-    return [];
-  }
-};
+export const getOrders = async () => safeFetchFromSheet('get', 'Orders');
 
 export const updateOrderStatus = async (orderId: string, status: string, lastContactedBy?: string, notes?: string) => {
   try {
@@ -332,42 +347,17 @@ export const updateOrderStatus = async (orderId: string, status: string, lastCon
   }
 };
 
-export const getAdmins = async () => {
-  try {
-    const response = await fetch(GOOGLE_SCRIPT_URL + '?action=getAdmins&_t=' + Date.now());
-    const data = await response.json();
-    return validateAndAlertEmptyData(data, 'Admins');
-  } catch (error) {
-    console.error("Error fetching admins in dashboard:", error);
-    return [];
-  }
-};
+export const getAdmins = async () => safeFetchFromSheet('getAdmins', 'Admins');
 
 export const getServices = async () => {
-  try {
-    const response = await fetch(GOOGLE_SCRIPT_URL + '?action=getServices&_t=' + Date.now());
-    const data = await response.json();
-    const validData = validateAndAlertEmptyData(data, 'Services');
-    return Array.isArray(validData) ? validData.map((s: any) => ({
-      ...s,
-      category: s.category ? String(s.category).trim() : 'أخرى'
-    })) : [];
-  } catch (error) {
-    console.error("Error fetching services in dashboard:", error);
-    return [];
-  }
+  const data = await safeFetchFromSheet('getServices', 'Services');
+  return Array.isArray(data) ? data.map((s: any) => ({
+    ...s,
+    category: s.category ? String(s.category).trim() : 'أخرى'
+  })) : [];
 };
 
-export const getCoupons = async () => {
-  try {
-    const response = await fetch(GOOGLE_SCRIPT_URL + '?action=getCoupons&_t=' + Date.now());
-    const data = await response.json();
-    return validateAndAlertEmptyData(data, 'Coupons');
-  } catch (error) {
-    console.error("Error fetching coupons in dashboard:", error);
-    return [];
-  }
-};
+export const getCoupons = async () => safeFetchFromSheet('getCoupons', 'Coupons');
 
 export const addService = async (serviceData: any) => {
   try {
@@ -418,22 +408,15 @@ export const deleteService = async (serviceId: string) => {
 };
 
 export const getExpensesSheet = async () => {
-  try {
-    const response = await fetch(GOOGLE_SCRIPT_URL + '?action=getExpenses&_t=' + Date.now());
-    const data = await response.json();
-    const validData = validateAndAlertEmptyData(data, 'ExpensesSheet');
-    if (Array.isArray(validData)) {
-      return validData.filter((item: any) => {
-        const desc = String(item.description || '').toLowerCase();
-        const amt = Number(item.amount || 0);
-        return amt !== 5750 && !desc.includes('مقدم فاتورة') && !desc.includes('inv-2026-001');
-      });
-    }
-    return [];
-  } catch (error) {
-    console.error("Error fetching expenses sheet:", error);
-    return [];
+  const validData = await safeFetchFromSheet('getExpenses', 'ExpensesSheet');
+  if (Array.isArray(validData)) {
+    return validData.filter((item: any) => {
+      const desc = String(item.description || '').toLowerCase();
+      const amt = Number(item.amount || 0);
+      return amt !== 5750 && !desc.includes('مقدم فاتورة') && !desc.includes('inv-2026-001');
+    });
   }
+  return [];
 };
 
 export const saveExpenseToSheet = async (expenseData: any) => {
@@ -452,16 +435,7 @@ export const saveExpenseToSheet = async (expenseData: any) => {
   }
 };
 
-export const getHRPayrollSheet = async () => {
-  try {
-    const response = await fetch(GOOGLE_SCRIPT_URL + '?action=getHR&_t=' + Date.now());
-    const data = await response.json();
-    return validateAndAlertEmptyData(data, 'HRPayrollSheet');
-  } catch (error) {
-    console.error("Error fetching HR payroll sheet:", error);
-    return [];
-  }
-};
+export const getHRPayrollSheet = async () => safeFetchFromSheet('getHR', 'HRPayrollSheet');
 
 export const addHREntryToSheet = async (hrData: any) => {
   try {
@@ -479,16 +453,7 @@ export const addHREntryToSheet = async (hrData: any) => {
   }
 };
 
-export const getInvestorsSheet = async () => {
-  try {
-    const response = await fetch(GOOGLE_SCRIPT_URL + '?action=getInvestors&_t=' + Date.now());
-    const data = await response.json();
-    return validateAndAlertEmptyData(data, 'InvestorsSheet');
-  } catch (error) {
-    console.error("Error fetching investors sheet:", error);
-    return [];
-  }
-};
+export const getInvestorsSheet = async () => safeFetchFromSheet('getInvestors', 'InvestorsSheet');
 
 export const saveInvestorToSheet = async (investorData: any) => {
   try {
@@ -506,16 +471,7 @@ export const saveInvestorToSheet = async (investorData: any) => {
   }
 };
 
-export const getInvoicesSheet = async () => {
-  try {
-    const response = await fetch(GOOGLE_SCRIPT_URL + '?action=getInvoices&_t=' + Date.now());
-    const data = await response.json();
-    return validateAndAlertEmptyData(data, 'InvoicesSheet');
-  } catch (error) {
-    console.error("Error fetching invoices sheet:", error);
-    return [];
-  }
-};
+export const getInvoicesSheet = async () => safeFetchFromSheet('getInvoices', 'InvoicesSheet');
 
 export const saveInvoiceToSheet = async (invoiceData: any) => {
   try {
@@ -533,16 +489,7 @@ export const saveInvoiceToSheet = async (invoiceData: any) => {
   }
 };
 
-export const getIncomingBillsSheet = async () => {
-  try {
-    const response = await fetch(GOOGLE_SCRIPT_URL + '?action=getIncomingBills&_t=' + Date.now());
-    const data = await response.json();
-    return validateAndAlertEmptyData(data, 'IncomingBillsSheet');
-  } catch (error) {
-    console.error("Error fetching incoming bills sheet:", error);
-    return [];
-  }
-};
+export const getIncomingBillsSheet = async () => safeFetchFromSheet('getIncomingBills', 'IncomingBillsSheet');
 
 export const saveIncomingBillToSheet = async (billData: any) => {
   try {
@@ -560,16 +507,7 @@ export const saveIncomingBillToSheet = async (billData: any) => {
   }
 };
 
-export const getClientContractsSheet = async () => {
-  try {
-    const response = await fetch(GOOGLE_SCRIPT_URL + '?action=getClientContracts&_t=' + Date.now());
-    const data = await response.json();
-    return validateAndAlertEmptyData(data, 'ClientContracts');
-  } catch (error) {
-    console.error("Error fetching client contracts:", error);
-    return [];
-  }
-};
+export const getClientContractsSheet = async () => safeFetchFromSheet('getClientContracts', 'ClientContracts');
 
 export const saveClientContractToSheet = async (contractData: any) => {
   try {
@@ -586,16 +524,7 @@ export const saveClientContractToSheet = async (contractData: any) => {
   }
 };
 
-export const getEmployeeContractsSheet = async () => {
-  try {
-    const response = await fetch(GOOGLE_SCRIPT_URL + '?action=getEmployeeContracts&_t=' + Date.now());
-    const data = await response.json();
-    return validateAndAlertEmptyData(data, 'EmployeeContracts');
-  } catch (error) {
-    console.error("Error fetching employee contracts:", error);
-    return [];
-  }
-};
+export const getEmployeeContractsSheet = async () => safeFetchFromSheet('getEmployeeContracts', 'EmployeeContracts');
 
 export const saveEmployeeContractToSheet = async (contractData: any) => {
   try {
@@ -612,16 +541,7 @@ export const saveEmployeeContractToSheet = async (contractData: any) => {
   }
 };
 
-export const getFreelancerContractsSheet = async () => {
-  try {
-    const response = await fetch(GOOGLE_SCRIPT_URL + '?action=getFreelancerContracts&_t=' + Date.now());
-    const data = await response.json();
-    return validateAndAlertEmptyData(data, 'FreelancerContracts');
-  } catch (error) {
-    console.error("Error fetching freelancer contracts:", error);
-    return [];
-  }
-};
+export const getFreelancerContractsSheet = async () => safeFetchFromSheet('getFreelancerContracts', 'FreelancerContracts');
 
 export const saveFreelancerContractToSheet = async (contractData: any) => {
   try {
@@ -638,16 +558,7 @@ export const saveFreelancerContractToSheet = async (contractData: any) => {
   }
 };
 
-export const getGeneralDocumentsSheet = async () => {
-  try {
-    const response = await fetch(GOOGLE_SCRIPT_URL + '?action=getGeneralDocuments&_t=' + Date.now());
-    const data = await response.json();
-    return validateAndAlertEmptyData(data, 'GeneralDocuments');
-  } catch (error) {
-    console.error("Error fetching general documents:", error);
-    return [];
-  }
-};
+export const getGeneralDocumentsSheet = async () => safeFetchFromSheet('getGeneralDocuments', 'GeneralDocuments');
 
 export const saveGeneralDocumentToSheet = async (docData: any) => {
   try {
@@ -664,16 +575,7 @@ export const saveGeneralDocumentToSheet = async (docData: any) => {
   }
 };
 
-export const getMarketingSocialSheet = async () => {
-  try {
-    const response = await fetch(GOOGLE_SCRIPT_URL + '?action=getMarketingSocial&_t=' + Date.now());
-    const data = await response.json();
-    return validateAndAlertEmptyData(data, 'MarketingSocial');
-  } catch (error) {
-    console.error("Error fetching marketing social sheet:", error);
-    return [];
-  }
-};
+export const getMarketingSocialSheet = async () => safeFetchFromSheet('getMarketingSocial', 'MarketingSocial');
 
 export const saveMarketingSocialToSheet = async (data: any) => {
   try {
@@ -705,16 +607,7 @@ export const deleteMarketingSocialFromSheet = async (id: string) => {
   }
 };
 
-export const getQuotesSheet = async () => {
-  try {
-    const response = await fetch(GOOGLE_SCRIPT_URL + '?action=getQuotes&_t=' + Date.now());
-    const data = await response.json();
-    return validateAndAlertEmptyData(data, 'QuotesSheet');
-  } catch (error) {
-    console.error("Error fetching quotes:", error);
-    return [];
-  }
-};
+export const getQuotesSheet = async () => safeFetchFromSheet('getQuotes', 'QuotesSheet');
 
 export const saveQuoteToSheet = async (quoteData: any) => {
   try {
@@ -731,16 +624,7 @@ export const saveQuoteToSheet = async (quoteData: any) => {
   }
 };
 
-export const getFreelanceSheet = async () => {
-  try {
-    const response = await fetch(GOOGLE_SCRIPT_URL + '?action=getFreelance&_t=' + Date.now());
-    const data = await response.json();
-    return validateAndAlertEmptyData(data, 'FreelanceSheet');
-  } catch (error) {
-    console.error("Error fetching freelance sheet:", error);
-    return [];
-  }
-};
+export const getFreelanceSheet = async () => safeFetchFromSheet('getFreelance', 'FreelanceSheet');
 
 export const saveFreelanceToSheet = async (freelancerData: any) => {
   try {
@@ -772,16 +656,7 @@ export const deleteFreelanceFromSheet = async (id: string) => {
   }
 };
 
-export const getFreelanceFinanceSheet = async () => {
-  try {
-    const response = await fetch(GOOGLE_SCRIPT_URL + '?action=getFreelanceFinance&_t=' + Date.now());
-    const data = await response.json();
-    return validateAndAlertEmptyData(data, 'FreelanceFinance');
-  } catch (error) {
-    console.error("Error fetching freelance finance sheet:", error);
-    return [];
-  }
-};
+export const getFreelanceFinanceSheet = async () => safeFetchFromSheet('getFreelanceFinance', 'FreelanceFinance');
 
 export const saveFreelanceFinanceToSheet = async (data: any) => {
   try {
@@ -813,16 +688,7 @@ export const deleteFreelanceFinanceFromSheet = async (id: string) => {
   }
 };
 
-export const getProjects = async () => {
-  try {
-    const response = await fetch(GOOGLE_SCRIPT_URL + '?action=getProjects&_t=' + Date.now());
-    const data = await response.json();
-    return validateAndAlertEmptyData(data, 'Projects');
-  } catch (error) {
-    console.error("Error fetching projects sheet:", error);
-    return [];
-  }
-};
+export const getProjects = async () => safeFetchFromSheet('getProjects', 'Projects');
 
 export const saveProjectToSheet = async (projectData: any) => {
   try {
@@ -856,16 +722,7 @@ export const deleteProjectFromSheet = async (projectId: string) => {
   }
 };
 
-export const getTasks = async () => {
-  try {
-    const response = await fetch(GOOGLE_SCRIPT_URL + '?action=getTasks&_t=' + Date.now());
-    const data = await response.json();
-    return validateAndAlertEmptyData(data, 'Tasks');
-  } catch (error) {
-    console.error("Error fetching tasks sheet:", error);
-    return [];
-  }
-};
+export const getTasks = async () => safeFetchFromSheet('getTasks', 'Tasks');
 
 export const saveTaskToSheet = async (taskData: any) => {
   try {

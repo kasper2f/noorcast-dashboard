@@ -53,8 +53,9 @@ export default function ClientsPage() {
       const records = Array.isArray(data) ? data
         .filter((item: any) => {
           if (!item) return false;
-          const status = String(item.status || '').trim().toLowerCase();
-          return status === 'تم التنفيذ';
+          const status = String(item.status || '').trim();
+          // عرض الحالات المنتهية (تم التنفيذ أو مغلق) فقط في قائمة الأرشيف
+          return status === 'تم التنفيذ' || status === 'مغلق';
         })
         .map((item: any, index: number) => {
           const rawNotes = String(item.notes || item.details || 'لا توجد ملاحظات سابقة');
@@ -69,9 +70,12 @@ export default function ClientsPage() {
             assignedEmployee: String(item.lastContactedBy || item.assignedEmployee || 'النظام'),
             notesList: notesList.length > 0 ? notesList : ['لا توجد ملاحظات سابقة'],
             latestNote: getAbsoluteLatestNote(rawNotes), 
-            status: String(item.status || 'تم التنفيذ').trim()
+            status: String(item.status || 'تم التنفيذ').trim(),
+            createdAt: item.createdAt || new Date().toISOString()
           };
-        }) : [];
+        })
+        // ترتيب تنازلي بحيث يصعد أحدث طلب تم إرساله إلى هنا لأعلى القائمة
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()) : [];
 
       setClients(records);
     } catch (error) {
@@ -114,8 +118,8 @@ export default function ClientsPage() {
       {/* رأس الصفحة وشريط البحث */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px', marginBottom: '25px' }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 'bold' }}>أرشيف العملاء المنفذين</h1>
-          <p style={{ color: '#94a3b8', fontSize: '0.85rem', margin: '4px 0 0 0' }}>سجل العملاء الذين اكتملت مشاريعهم وتم إنجازها بنجاح</p>
+          <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 'bold' }}>قائمة العملاء (الأرشيف)</h1>
+          <p style={{ color: '#94a3b8', fontSize: '0.85rem', margin: '4px 0 0 0' }}>سجل العملاء الذين اكتملت مشاريعهم أو أغلقت طلباتهم</p>
         </div>
         
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap', width: '100%', maxWidth: '450px' }}>
@@ -142,7 +146,7 @@ export default function ClientsPage() {
             <table style={tableStyle}>
               <thead>
                 <tr style={{ background: '#0f172a', borderBottom: '1px solid #334155', color: '#94a3b8' }}>
-                  {['الشركة / العميل', 'البريد الإلكتروني', 'الجوال / الواتساب', 'إجمالي التعاقد (LTV)', 'آخر مسؤول', 'آخر تحديث (ملاحظة أو النظام)', 'الحالة', 'تواصل سريع'].map(h => (
+                  {['الشركة / العميل', 'البريد الإلكتروني', 'الجوال / الواتساب', 'إجمالي التعاقد (LTV)', 'آخر مسؤول', 'سجل المحادثات والملاحظات', 'الحالة', 'تواصل سريع'].map(h => (
                     <th key={h} style={thStyle}>{h}</th>
                   ))}
                 </tr>
@@ -166,19 +170,19 @@ export default function ClientsPage() {
                             <div style={{ fontSize: '0.85rem', color: '#cbd5e1', background: '#0f172a', padding: '8px 12px', borderRadius: '8px', border: '1px solid #334155', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={c.latestNote}>
                               {c.latestNote}
                             </div>
-                            {c.notesList.length > 1 && (
+                            {c.notesList.length > 0 && (
                               <button 
                                 onClick={() => openHistoryModal(c.name, c.notesList)} 
                                 style={historyBtnStyle}
                               >
-                                <FiFileText size={13} /> عرض سجل المحادثات والملاحظات ({c.notesList.length})
+                                <FiFileText size={13} /> عرض السجل الكامل ({c.notesList.length})
                               </button>
                             )}
                           </div>
                         </td>
 
                         <td style={{ ...tdStyle, whiteSpace: 'nowrap' }}>
-                          <span style={{ padding: '6px 12px', borderRadius: '8px', background: '#065f46', color: '#ffffff', fontSize: '0.8rem', fontWeight: 'bold', display: 'inline-block', textAlign: 'center' }}>
+                          <span style={{ padding: '6px 12px', borderRadius: '8px', background: c.status === 'مغلق' ? '#475569' : '#065f46', color: '#ffffff', fontSize: '0.8rem', fontWeight: 'bold', display: 'inline-block', textAlign: 'center' }}>
                             {c.status}
                           </span>
                         </td>
@@ -215,7 +219,7 @@ export default function ClientsPage() {
                 ) : (
                   <tr>
                     <td colSpan={8} style={{ textAlign: 'center', padding: '50px', color: '#94a3b8' }}>
-                      لا توجد عملاء في الأرشيف حالياً (بانتظار إنجاز المشاريع وتحويل حالتها إلى "تم التنفيذ").
+                      لا توجد عملاء في الأرشيف حالياً.
                     </td>
                   </tr>
                 )}
@@ -236,7 +240,7 @@ export default function ClientsPage() {
                     
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span style={{ fontWeight: 'bold', fontSize: '1.05rem', color: '#f8fafc' }}>{c.name}</span>
-                      <span style={{ padding: '4px 10px', borderRadius: '6px', background: '#065f46', color: '#ffffff', fontSize: '0.75rem', fontWeight: 'bold' }}>
+                      <span style={{ padding: '4px 10px', borderRadius: '6px', background: c.status === 'مغلق' ? '#475569' : '#065f46', color: '#ffffff', fontSize: '0.75rem', fontWeight: 'bold' }}>
                         {c.status}
                       </span>
                     </div>
@@ -253,17 +257,17 @@ export default function ClientsPage() {
 
                     {/* آخر ملاحظة */}
                     <div style={{ background: '#0f172a', padding: '10px', borderRadius: '8px', border: '1px solid #334155', fontSize: '0.82rem', color: '#e2e8f0', lineHeight: '1.4' }}>
-                      <div style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '4px', fontWeight: 'bold' }}>آخر تحديث:</div>
+                      <div style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '4px', fontWeight: 'bold' }}>سجل المحادثات:</div>
                       {c.latestNote}
                     </div>
 
-                    {/* زر عرض السجل الكامل إن وجد */}
-                    {c.notesList.length > 1 && (
+                    {/* زر عرض السجل الكامل */}
+                    {c.notesList.length > 0 && (
                       <button 
                         onClick={() => openHistoryModal(c.name, c.notesList)} 
                         style={{ ...historyBtnStyle, width: '100%', justifyContent: 'center', padding: '8px' }}
                       >
-                        <FiFileText size={14} /> عرض سجل المحادثات ({c.notesList.length})
+                        <FiFileText size={14} /> عرض سجل المحادثات الكامل ({c.notesList.length})
                       </button>
                     )}
 
