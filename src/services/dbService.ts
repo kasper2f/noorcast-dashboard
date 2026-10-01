@@ -447,13 +447,20 @@ export const saveInvestorToSheet = async (investorData: any) => {
   }
 };
 
+// 💡 التحديث هنا: تأمين إرسال مصفوفة الخدمات (items) كـ JSON 
 export const saveInvoiceToSheet = async (invoiceData: any) => {
   try {
+    const payload = {
+      ...invoiceData,
+      items: typeof invoiceData.items === 'object' ? JSON.stringify(invoiceData.items) : (invoiceData.items || '[]'),
+      discount: invoiceData.discount || 0
+    };
+
     await fetch(GOOGLE_SCRIPT_URL, {
       method: 'POST',
       mode: 'no-cors',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'saveInvoice', ...invoiceData })
+      body: JSON.stringify({ action: 'saveInvoice', ...payload })
     });
     await logDashboardAction('SAVE_INVOICE', invoiceData.number || 'Invoice', `تم حفظ الفاتورة بقيمة ${invoiceData.amount} ر.س`);
     return "Success";
@@ -561,13 +568,20 @@ export const deleteMarketingSocialFromSheet = async (id: string) => {
   }
 };
 
+// 💡 التحديث هنا: تأمين إرسال مصفوفة الخدمات لعروض الأسعار
 export const saveQuoteToSheet = async (quoteData: any) => {
   try {
+    const payload = {
+      ...quoteData,
+      items: typeof quoteData.items === 'object' ? JSON.stringify(quoteData.items) : (quoteData.items || '[]'),
+      discount: quoteData.discount || 0
+    };
+
     await fetch(GOOGLE_SCRIPT_URL, {
       method: 'POST',
       mode: 'no-cors',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'saveQuote', ...quoteData })
+      body: JSON.stringify({ action: 'saveQuote', ...payload })
     });
     return "Success";
   } catch (error) {

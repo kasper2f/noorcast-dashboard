@@ -20,7 +20,7 @@ export default function SalesContractsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loadingCloud, setLoadingCloud] = useState(false);
 
-  const noorcastLogoUrl = 'https://res.cloudinary.com/dfwfh4xzb/image/upload/v1782727817/WhatsApp_Image_2026-06-21_at_12.56.07_AM_dhzswc.png';
+  const noorcastLogoUrl = 'https://res.cloudinary.com/dfwfh4xzb/image/upload/v1790846600/%D8%AC%D8%AF%D9%8A%D8%AF_%D8%B1%D8%A7%D8%B3%D9%8A_%D8%A7%D8%A8%D9%8A%D8%B61_s6ubcr.png';
 
   const cleanPrice = (val: any) => {
     if (val === null || val === undefined || val === '') return 0;
@@ -83,12 +83,14 @@ export default function SalesContractsPage() {
   const [isBillModalOpen, setIsBillModalOpen] = useState(false);
   
   const [editingQuoteId, setEditingQuoteId] = useState<string | null>(null);
+  const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null);
 
   const [newQuote, setNewQuote] = useState({ 
     clientName: '', 
     clientTaxNumber: '', 
     terms: 'صالح لمدة 15 يوماً.',
-    items: [{ serviceName: '', quantity: 1, description: '', unitPrice: 0 }]
+    discount: 0,
+    items: [{ serviceName: '', quantity: 1, description: '', unitPrice: 0, discountPercent: 0 }]
   });
 
   const [newInvoice, setNewInvoice] = useState({ 
@@ -97,7 +99,8 @@ export default function SalesContractsPage() {
     status: 'تم الإرسال', 
     dueDate: new Date().toISOString().split('T')[0], 
     file: null as File | null,
-    items: [{ serviceName: '', quantity: 1, description: '', unitPrice: 0 }]
+    discount: 0,
+    items: [{ serviceName: '', quantity: 1, description: '', unitPrice: 0, discountPercent: 0 }]
   });
   
   const [newBill, setNewBill] = useState({  
@@ -126,35 +129,53 @@ export default function SalesContractsPage() {
       ]);
 
       if (Array.isArray(cloudQuotes)) {
-        setQuotes(cloudQuotes.map((q: any) => ({
-          id: String(q.id || 'QT-2026'),
-          client: String(q.client || ''),
-          clientTaxNumber: String(q.clientTaxNumber || ''),
-          items: Array.isArray(q.items) ? q.items : [{ serviceName: q.serviceType || 'خدمة', quantity: 1, description: '', unitPrice: cleanPrice(q.amount) }],
-          amount: Number(q.amount || 0),
-          vat: Number(q.vat || 0),
-          total: Number(q.total || 0),
-          terms: String(q.terms || ''),
-          fileUrl: q.fileUrl || '',
-          date: formatDate(q.date)
-        })));
+        setQuotes(cloudQuotes.map((q: any) => {
+          let parsedItems = [];
+          try {
+            parsedItems = typeof q.items === 'string' ? JSON.parse(q.items) : (q.items || []);
+          } catch {
+            parsedItems = [{ serviceName: q.serviceType || 'خدمة', quantity: 1, description: '', unitPrice: cleanPrice(q.amount), discountPercent: 0 }];
+          }
+          return {
+            id: String(q.id || 'QT-2026'),
+            client: String(q.client || ''),
+            clientTaxNumber: String(q.clientTaxNumber || ''),
+            items: parsedItems.length > 0 ? parsedItems : [{ serviceName: 'خدمة', quantity: 1, description: '', unitPrice: cleanPrice(q.amount), discountPercent: 0 }],
+            amount: Number(q.amount || 0),
+            vat: Number(q.vat || 0),
+            total: Number(q.total || 0),
+            discount: cleanPrice(q.discount || 0),
+            terms: String(q.terms || ''),
+            fileUrl: q.fileUrl || '',
+            date: formatDate(q.date)
+          };
+        }));
       }
 
       if (Array.isArray(cloudInvoices)) {
-        setInvoices(cloudInvoices.map((inv: any) => ({
-          id: String(inv.id || inv.number || 'INV'),
-          client: String(inv.client || ''),
-          clientTaxNumber: String(inv.clientTaxNumber || ''),
-          items: Array.isArray(inv.items) ? inv.items : [{ serviceName: inv.serviceType || 'خدمة', quantity: 1, description: '', unitPrice: cleanPrice(inv.amount) / 1.15 }],
-          amount: Number(inv.amount || 0) / 1.15,
-          vat: Number(inv.amount || 0) - (Number(inv.amount || 0) / 1.15),
-          total: Number(inv.amount || 0),
-          status: String(inv.status || 'تم الإرسال'),
-          dueDate: formatDate(inv.dueDate),
-          date: formatDate(inv.date),
-          fileUrl: inv.fileUrl || '',
-          fileName: inv.fileUrl ? 'فاتورة_صادرة.pdf' : ''
-        })));
+        setInvoices(cloudInvoices.map((inv: any) => {
+          let parsedItems = [];
+          try {
+            parsedItems = typeof inv.items === 'string' ? JSON.parse(inv.items) : (inv.items || []);
+          } catch {
+            parsedItems = [{ serviceName: inv.serviceType || 'خدمة', quantity: 1, description: '', unitPrice: cleanPrice(inv.amount) / 1.15, discountPercent: 0 }];
+          }
+          return {
+            id: String(inv.id || inv.number || 'INV'),
+            client: String(inv.client || ''),
+            clientTaxNumber: String(inv.clientTaxNumber || ''),
+            items: parsedItems.length > 0 ? parsedItems : [{ serviceName: 'خدمة', quantity: 1, description: '', unitPrice: cleanPrice(inv.amount) / 1.15, discountPercent: 0 }],
+            amount: Number(inv.amount || 0) / 1.15,
+            vat: Number(inv.amount || 0) - (Number(inv.amount || 0) / 1.15),
+            total: Number(inv.amount || 0),
+            discount: cleanPrice(inv.discount || 0),
+            status: String(inv.status || 'تم الإرسال'),
+            dueDate: formatDate(inv.dueDate),
+            date: formatDate(inv.date),
+            fileUrl: inv.fileUrl || '',
+            fileName: inv.fileUrl ? 'فاتورة_صادرة.pdf' : ''
+          };
+        }));
       }
 
       if (Array.isArray(cloudBills)) {
@@ -181,19 +202,31 @@ export default function SalesContractsPage() {
 
   useEffect(() => { try { localStorage.setItem('noorcast_company_profile', JSON.stringify(companyInfo)); } catch {} }, [companyInfo]);
 
+  const calculateItemSubtotal = (item: any) => {
+    const qty = cleanPrice(item.quantity);
+    const price = cleanPrice(item.unitPrice);
+    const disc = cleanPrice(item.discountPercent);
+    const sub = qty * price;
+    return Math.max(0, sub - (sub * (disc / 100)));
+  };
+
   const handleQuoteItemChange = (index: number, field: string, value: any) => {
     const updatedItems = [...newQuote.items];
     updatedItems[index] = { ...updatedItems[index], [field]: value };
     setNewQuote({ ...newQuote, items: updatedItems });
   };
   const handleAddQuoteItem = () => {
-    setNewQuote({ ...newQuote, items: [...newQuote.items, { serviceName: '', quantity: 1, description: '', unitPrice: 0 }] });
+    setNewQuote({ ...newQuote, items: [...newQuote.items, { serviceName: '', quantity: 1, description: '', unitPrice: 0, discountPercent: 0 }] });
   };
   const handleRemoveQuoteItem = (index: number) => {
     if (newQuote.items.length === 1) return;
     setNewQuote({ ...newQuote, items: newQuote.items.filter((_, i) => i !== index) });
   };
-  const calculateQuoteSubtotal = () => newQuote.items.reduce((sum, item) => sum + (cleanPrice(item.quantity) * cleanPrice(item.unitPrice)), 0);
+  const calculateQuoteSubtotal = () => {
+    const sumItems = newQuote.items.reduce((sum, item) => sum + calculateItemSubtotal(item), 0);
+    const generalDisc = cleanPrice(newQuote.discount);
+    return Math.max(0, sumItems - (sumItems * (generalDisc / 100)));
+  };
 
   const handleInvoiceItemChange = (index: number, field: string, value: any) => {
     const updatedItems = [...newInvoice.items];
@@ -201,13 +234,17 @@ export default function SalesContractsPage() {
     setNewInvoice({ ...newInvoice, items: updatedItems });
   };
   const handleAddInvoiceItem = () => {
-    setNewInvoice({ ...newInvoice, items: [...newInvoice.items, { serviceName: '', quantity: 1, description: '', unitPrice: 0 }] });
+    setNewInvoice({ ...newInvoice, items: [...newInvoice.items, { serviceName: '', quantity: 1, description: '', unitPrice: 0, discountPercent: 0 }] });
   };
   const handleRemoveInvoiceItem = (index: number) => {
     if (newInvoice.items.length === 1) return;
     setNewInvoice({ ...newInvoice, items: newInvoice.items.filter((_, i) => i !== index) });
   };
-  const calculateInvoiceSubtotal = () => newInvoice.items.reduce((sum, item) => sum + (cleanPrice(item.quantity) * cleanPrice(item.unitPrice)), 0);
+  const calculateInvoiceSubtotal = () => {
+    const sumItems = newInvoice.items.reduce((sum, item) => sum + calculateItemSubtotal(item), 0);
+    const generalDisc = cleanPrice(newInvoice.discount);
+    return Math.max(0, sumItems - (sumItems * (generalDisc / 100)));
+  };
 
   const syncFreelancerStatusOnBillPaid = async (supplierName: string) => {
     try {
@@ -239,12 +276,14 @@ export default function SalesContractsPage() {
           id: targetInv.id,
           number: targetInv.id,
           client: targetInv.client,
+          clientTaxNumber: targetInv.clientTaxNumber || '',
           amount: targetInv.total || targetInv.amount,
           status: newStatus,
           dueDate: targetInv.dueDate || new Date().toISOString().split('T')[0],
           isExternal: true,
           fileUrl: targetInv.fileUrl || '',
-          items: targetInv.items
+          discount: targetInv.discount || 0,
+          items: JSON.stringify(targetInv.items)
         });
       }
       alert(`تم تحديث حالة الفاتورة الصادرة إلى [${newStatus}] سحابياً بنجاح! 🔄☁️`);
@@ -319,12 +358,14 @@ export default function SalesContractsPage() {
           id: targetInv.id,
           number: targetInv.id,
           client: targetInv.client,
+          clientTaxNumber: targetInv.clientTaxNumber || '',
           amount: targetInv.total || targetInv.amount,
           status: targetInv.status,
           dueDate: targetInv.dueDate,
           isExternal: true,
           fileUrl,
-          items: targetInv.items
+          discount: targetInv.discount || 0,
+          items: JSON.stringify(targetInv.items)
         });
       }
       alert(`تم رفع ملف الفاتورة الصادرة سحابياً بنجاح! 📎☁️`);
@@ -382,10 +423,11 @@ export default function SalesContractsPage() {
         id: quoteId,
         client: newQuote.clientName,
         clientTaxNumber: newQuote.clientTaxNumber,
-        items: newQuote.items,
+        items: JSON.stringify(newQuote.items),
         amount: subTotal,
         vat,
         total,
+        discount: newQuote.discount,
         terms: newQuote.terms,
         fileUrl: '',
         date: new Date().toISOString().split('T')[0]
@@ -393,7 +435,12 @@ export default function SalesContractsPage() {
 
       await saveQuoteToSheet(quoteData);
 
-      const formattedQuote = { ...quoteData, date: formatDate(quoteData.date) };
+      const formattedQuote = { 
+        ...quoteData, 
+        items: newQuote.items,
+        date: formatDate(quoteData.date) 
+      };
+
       if (editingQuoteId) {
         setQuotes(quotes.map(q => q.id === editingQuoteId ? formattedQuote : q));
         setEditingQuoteId(null);
@@ -402,7 +449,7 @@ export default function SalesContractsPage() {
       }
 
       setIsQuoteModalOpen(false);
-      setNewQuote({ clientName: '', clientTaxNumber: '', terms: 'صالح لمدة 15 يوماً.', items: [{ serviceName: '', quantity: 1, description: '', unitPrice: 0 }] });
+      setNewQuote({ clientName: '', clientTaxNumber: '', terms: 'صالح لمدة 15 يوماً.', discount: 0, items: [{ serviceName: '', quantity: 1, description: '', unitPrice: 0, discountPercent: 0 }] });
       alert("تم حفظ عرض السعر وترحيله سحابياً بنجاح! ✅☁️");
     } catch (err) {
       console.error(err);
@@ -418,13 +465,14 @@ export default function SalesContractsPage() {
       clientName: q.client, 
       clientTaxNumber: q.clientTaxNumber || '', 
       terms: q.terms, 
-      items: Array.isArray(q.items) && q.items.length > 0 ? q.items : [{ serviceName: q.serviceType || 'خدمة', quantity: 1, description: '', unitPrice: cleanPrice(q.amount) }]
+      discount: q.discount || 0,
+      items: Array.isArray(q.items) && q.items.length > 0 ? q.items : [{ serviceName: 'خدمة', quantity: 1, description: '', unitPrice: cleanPrice(q.amount), discountPercent: 0 }]
     });
     setIsQuoteModalOpen(true);
   };
   const handleDeleteQuote = (id: string) => { if (confirm("حذف العرض؟")) setQuotes(quotes.filter(q => q.id !== id)); };
 
-  const handleCreateInvoice = async (e: React.FormEvent) => {
+  const handleSaveInvoiceModal = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newInvoice.clientName || newInvoice.items.length === 0) { alert("أدخل اسم العميل وبند واحد على الأقل."); return; }
     
@@ -438,7 +486,7 @@ export default function SalesContractsPage() {
       const subTotal = calculateInvoiceSubtotal();
       const vat = subTotal * 0.15;
       const total = subTotal + vat;
-      const invoiceId = `INV-2026-${Math.floor(100 + Math.random() * 900)}`;
+      const invoiceId = editingInvoiceId || `INV-2026-${Math.floor(100 + Math.random() * 900)}`;
       
       const created = { 
         id: invoiceId, 
@@ -448,6 +496,7 @@ export default function SalesContractsPage() {
         amount: subTotal, 
         vat, 
         total, 
+        discount: newInvoice.discount,
         status: newInvoice.status, 
         dueDate: formatDate(newInvoice.dueDate), 
         date: formatDate(new Date()),
@@ -456,29 +505,50 @@ export default function SalesContractsPage() {
         isExternal: true 
       };
       
-      setInvoices([created, ...invoices]);
+      if (editingInvoiceId) {
+        setInvoices(invoices.map(inv => inv.id === editingInvoiceId ? created : inv));
+        setEditingInvoiceId(null);
+      } else {
+        setInvoices([created, ...invoices]);
+      }
 
       await saveInvoiceToSheet({
         id: invoiceId,
         number: invoiceId,
         client: created.client,
+        clientTaxNumber: created.clientTaxNumber,
         amount: total,
         status: created.status,
         dueDate: created.dueDate,
         isExternal: true,
         fileUrl,
-        items: created.items
+        discount: created.discount,
+        items: JSON.stringify(created.items)
       });
 
       setIsInvoiceModalOpen(false);
-      setNewInvoice({ clientName: '', clientTaxNumber: '', status: 'تم الإرسال', dueDate: new Date().toISOString().split('T')[0], file: null, items: [{ serviceName: '', quantity: 1, description: '', unitPrice: 0 }] });
-      alert(`تم إصدار الفاتورة وحفظها سحابياً بنجاح! 💰☁️`);
+      setNewInvoice({ clientName: '', clientTaxNumber: '', status: 'تم الإرسال', dueDate: new Date().toISOString().split('T')[0], file: null, discount: 0, items: [{ serviceName: '', quantity: 1, description: '', unitPrice: 0, discountPercent: 0 }] });
+      alert(`تم حفظ وتحديث الفاتورة سحابياً بنجاح! 💰☁️`);
     } catch (err) {
       console.error(err);
       alert("حدث خطأ أثناء الإصدار والحفظ.");
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleEditInvoice = (inv: any) => {
+    setEditingInvoiceId(inv.id);
+    setNewInvoice({
+      clientName: inv.client,
+      clientTaxNumber: inv.clientTaxNumber || '',
+      status: inv.status || 'تم الإرسال',
+      dueDate: inv.dueDate || new Date().toISOString().split('T')[0],
+      file: null,
+      discount: inv.discount || 0,
+      items: Array.isArray(inv.items) && inv.items.length > 0 ? inv.items : [{ serviceName: 'خدمة', quantity: 1, description: '', unitPrice: cleanPrice(inv.amount), discountPercent: 0 }]
+    });
+    setIsInvoiceModalOpen(true);
   };
 
   const handleDeleteInvoice = (id: string) => { 
@@ -580,7 +650,7 @@ export default function SalesContractsPage() {
           <style>
             body { font-family: 'Cairo', Tahoma, sans-serif; padding: 40px; color: #1e293b; background: #fff; }
             .header { text-align: center; border-bottom: 2px solid #0f172a; padding-bottom: 20px; margin-bottom: 25px; }
-            .logo-img { height: 45px; object-fit: contain; margin-bottom: 10px; }
+            .logo-img { height: 50px; object-fit: contain; margin-bottom: 10px; }
             .main-comp { font-size: 1.25rem; font-weight: bold; color: #0f172a; }
             .sub-comp { font-size: 0.95rem; color: #64748b; margin-top: 4px; }
             .doc-header-center { text-align: center; margin-bottom: 25px; }
@@ -605,7 +675,7 @@ export default function SalesContractsPage() {
           </div>
 
           <div class="doc-header-center">
-            <h3>${docType === 'invoice' ? 'فاتورة ضريبية رسمية' : 'عرض سعر'}</h3>
+            <h3>${docType === 'invoice' ? 'فاتورة ضريبية' : 'عرض سعر'}</h3>
             <div class="doc-meta">
               <strong>رقم المستند:</strong> ${item.id} &nbsp;|&nbsp; 
               <strong>تاريخ الإصدار:</strong> ${formatDate(item.date)} 
@@ -623,30 +693,38 @@ export default function SalesContractsPage() {
             <thead>
               <tr>
                 <th>م</th>
-                <th>اسم الخدمة</th>
+                <th>الخدمة</th>
+                <th>التفاصيل</th>
                 <th>الكمية</th>
-                <th>الوصف التفصيلي</th>
-                <th>سعر الوحدة</th>
+                <th>السعر</th>
+                <th>الخصم (%)</th>
                 <th>الإجمالي</th>
               </tr>
             </thead>
             <tbody>
-              ${Array.isArray(item.items) ? item.items.map((it: any, i: number) => `
-                <tr>
-                  <td>${i + 1}</td>
-                  <td><strong>${it.serviceName}</strong></td>
-                  <td>${it.quantity}</td>
-                  <td>${it.description || '-'}</td>
-                  <td>${cleanPrice(it.unitPrice).toLocaleString()} ر.س</td>
-                  <td>${(cleanPrice(it.quantity) * cleanPrice(it.unitPrice)).toLocaleString()} ر.س</td>
-                </tr>
-              `).join('') : `
+              ${Array.isArray(item.items) ? item.items.map((it: any, i: number) => {
+                const itemTot = cleanPrice(it.quantity) * cleanPrice(it.unitPrice);
+                const discVal = itemTot * (cleanPrice(it.discountPercent) / 100);
+                const finalItemTot = Math.max(0, itemTot - discVal);
+                return `
+                  <tr>
+                    <td>${i + 1}</td>
+                    <td><strong>${it.serviceName}</strong></td>
+                    <td>${it.description || '-'}</td>
+                    <td>${it.quantity}</td>
+                    <td>${cleanPrice(it.unitPrice).toLocaleString()} ر.س</td>
+                    <td>${cleanPrice(it.discountPercent)}%</td>
+                    <td>${finalItemTot.toLocaleString()} ر.س</td>
+                  </tr>
+                `;
+              }).join('') : `
                 <tr>
                   <td>1</td>
                   <td>خدمة</td>
-                  <td>1</td>
                   <td>-</td>
+                  <td>1</td>
                   <td>${subTotal.toLocaleString()} ر.س</td>
+                  <td>0%</td>
                   <td>${subTotal.toLocaleString()} ر.س</td>
                 </tr>
               `}
@@ -654,6 +732,7 @@ export default function SalesContractsPage() {
           </table>
 
           <div class="total-section">
+            ${item.discount ? `<p>نسبة الخصم الإضافي: ${item.discount}%</p>` : ''}
             <p>المبلغ غير شامل الضريبة: ${subTotal.toLocaleString()} ر.س</p>
             <p>ضريبة القيمة المضافة (15%): ${vatAmount.toLocaleString()} ر.س</p>
             <p style="color: #2563eb; font-size: 1.2rem;">الإجمالي النهائي شامل الضريبة: ${finalTotal.toLocaleString()} ر.س</p>
@@ -707,12 +786,12 @@ export default function SalesContractsPage() {
   return (
     <div style={{ padding: '32px', color: 'white', minHeight: '100vh', background: '#0f172a', fontFamily: 'Cairo, sans-serif', boxSizing: 'border-box' }}>
       
-      {/* الترويسة العليا باسم الشركة الرئيسي */}
       <div style={{ textAlign: 'center', marginBottom: '30px', borderBottom: '1px solid #334155', paddingBottom: '18px' }}>
+        <img src={noorcastLogoUrl} alt="Noorcast Logo" style={{ height: '45px', objectFit: 'contain', marginBottom: '8px' }} />
         <div style={{ fontSize: '1.35rem', fontWeight: 'bold', color: '#38bdf8', letterSpacing: '0.5px' }}>
           {companyInfo.mainCompanyName || 'شركة النوركاست العالمية المحدودة'}
         </div>
-        <div style={{ fontSize: '0.95rem', color: '#94a3b8', marginTop: '5px' }}>
+        <div style={{ fontSize: '0.95rem', color: '#94a3b8', marginTop: '4px' }}>
           السجل التجاري: {companyInfo.crNumber} | الرقم الضريبي: {companyInfo.vatNumber}
         </div>
       </div>
@@ -796,8 +875,8 @@ export default function SalesContractsPage() {
         </div>
 
         <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-          {activeTab === 'quotes' && <button onClick={() => { setEditingQuoteId(null); setIsQuoteModalOpen(true); }} style={primaryBtn}><FiPlus /> إنشاء عرض سعر تفصيلي ➕</button>}
-          {activeTab === 'invoices' && <button onClick={() => setIsInvoiceModalOpen(true)} style={primaryBtn}><FiPlus /> إصدار فاتورة ضريبية تفصيلية 💰</button>}
+          {activeTab === 'quotes' && <button onClick={() => { setEditingQuoteId(null); setNewQuote({ clientName: '', clientTaxNumber: '', terms: 'صالح لمدة 15 يوماً.', discount: 0, items: [{ serviceName: '', quantity: 1, description: '', unitPrice: 0, discountPercent: 0 }] }); setIsQuoteModalOpen(true); }} style={primaryBtn}><FiPlus /> إنشاء عرض سعر تفصيلي ➕</button>}
+          {activeTab === 'invoices' && <button onClick={() => { setEditingInvoiceId(null); setNewInvoice({ clientName: '', clientTaxNumber: '', status: 'تم الإرسال', dueDate: new Date().toISOString().split('T')[0], file: null, discount: 0, items: [{ serviceName: '', quantity: 1, description: '', unitPrice: 0, discountPercent: 0 }] }); setIsInvoiceModalOpen(true); }} style={primaryBtn}><FiPlus /> إصدار فاتورة ضريبية تفصيلية 💰</button>}
           {activeTab === 'incoming_bills' && <button onClick={() => setIsBillModalOpen(true)} style={primaryBtn}><FiPlus /> إضافة فاتورة التزام (وارد) 🧾</button>}
           <button onClick={() => exportToCSV(activeTab === 'quotes' ? quotes : activeTab === 'invoices' ? invoices : incomingBills, 'Report')} style={secondaryBtn}>
             <FiDownload /> تحميل (CSV) 📊
@@ -811,12 +890,14 @@ export default function SalesContractsPage() {
         <button onClick={() => setActiveTab('incoming_bills')} style={activeTab === 'incoming_bills' ? activeTabBtn : tabBtn}><FiCreditCard /> فواتير الالتزامات (وارد)</button>
       </div>
 
-      {/* مودال عروض الأسعار مع البنود المتعددة */}
       {isQuoteModalOpen && (
         <div style={modalOverlay}>
-          <div style={{ ...modalContent, maxWidth: '750px' }}>
+          <div style={{ ...modalContent, maxWidth: '850px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-              <h3 style={{ margin: 0, color: '#1e293b', fontWeight: 'bold' }}>📄 عرض سعر تفصيلي جديد</h3>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <img src={noorcastLogoUrl} alt="Logo" style={{ height: '30px', objectFit: 'contain' }} />
+                <h3 style={{ margin: 0, color: '#1e293b', fontWeight: 'bold' }}>{editingQuoteId ? '✏️️ تعديل عرض السعر' : '📄 عرض سعر تفصيلي جديد'}</h3>
+              </div>
               <button onClick={() => setIsQuoteModalOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}><FiX size={20} /></button>
             </div>
             
@@ -834,61 +915,54 @@ export default function SalesContractsPage() {
 
               <div style={{ margin: '15px 0 10px 0', borderTop: '1px solid #e2e8f0', paddingTop: '15px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                  <label style={{ ...labelStyle, fontSize: '0.95rem', color: '#2563eb' }}>بنود عرض السعر (الخدمة - الكمية - الوصف - سعر الوحدة):</label>
+                  <label style={{ ...labelStyle, fontSize: '0.95rem', color: '#2563eb' }}>بنود عرض السعر (الخدمة - التفاصيل - الكمية - السعر - الخصم %):</label>
                   <button type="button" onClick={handleAddQuoteItem} style={{ background: '#2563eb', color: 'white', border: 'none', borderRadius: '6px', padding: '6px 12px', fontSize: '0.85rem', cursor: 'pointer', fontWeight: 'bold' }}>
                     + إضافة بند جديد
                   </button>
                 </div>
 
                 {newQuote.items.map((item, index) => (
-                  <div key={index} style={{ background: '#f8fafc', padding: '12px', borderRadius: '8px', border: '1px solid #cbd5e1', marginBottom: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                      <input 
-                        style={{ ...inputStyle, flex: 2, margin: 0 }} 
-                        placeholder="اسم الخدمة (مثل: تصوير فوتوغرافي)" 
-                        value={item.serviceName} 
-                        onChange={e => handleQuoteItemChange(index, 'serviceName', e.target.value)} 
-                        required 
-                      />
-                      <input 
-                        type="number" 
-                        style={{ ...inputStyle, width: '90px', margin: 0 }} 
-                        placeholder="الكمية" 
-                        value={item.quantity} 
-                        min="1"
-                        onChange={e => handleQuoteItemChange(index, 'quantity', e.target.value)} 
-                        required 
-                      />
-                      <input 
-                        type="number" 
-                        style={{ ...inputStyle, width: '130px', margin: 0 }} 
-                        placeholder="سعر الوحدة (ر.س)" 
-                        value={item.unitPrice} 
-                        onChange={e => handleQuoteItemChange(index, 'unitPrice', e.target.value)} 
-                        required 
-                      />
+                  <div key={index} style={{ background: '#f8fafc', padding: '12px', borderRadius: '8px', border: '1px solid #cbd5e1', marginBottom: '10px', display: 'grid', gridTemplateColumns: '2fr 2.5fr 0.8fr 1.2fr 1fr auto', gap: '8px', alignItems: 'center' }}>
+                    <div>
+                      <label style={{ fontSize: '0.75rem', color: '#64748b' }}>الخدمة</label>
+                      <input style={{ ...inputStyle, margin: 0, padding: '8px' }} placeholder="اسم الخدمة" value={item.serviceName} onChange={e => handleQuoteItemChange(index, 'serviceName', e.target.value)} required />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '0.75rem', color: '#64748b' }}>التفاصيل</label>
+                      <input style={{ ...inputStyle, margin: 0, padding: '8px' }} placeholder="وصف الخدمة" value={item.description} onChange={e => handleQuoteItemChange(index, 'description', e.target.value)} />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '0.75rem', color: '#64748b' }}>الكمية</label>
+                      <input type="number" min="1" style={{ ...inputStyle, margin: 0, padding: '8px' }} value={item.quantity} onChange={e => handleQuoteItemChange(index, 'quantity', e.target.value)} required />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '0.75rem', color: '#64748b' }}>السعر (ر.س)</label>
+                      <input type="number" step="0.01" style={{ ...inputStyle, margin: 0, padding: '8px' }} value={item.unitPrice} onChange={e => handleQuoteItemChange(index, 'unitPrice', e.target.value)} required />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '0.75rem', color: '#64748b' }}>الخصم (%)</label>
+                      <input type="number" min="0" max="100" style={{ ...inputStyle, margin: 0, padding: '8px' }} value={item.discountPercent} onChange={e => handleQuoteItemChange(index, 'discountPercent', e.target.value)} />
+                    </div>
+                    <div>
                       {newQuote.items.length > 1 && (
-                        <button type="button" onClick={() => handleRemoveQuoteItem(index)} style={{ background: '#ef4444', color: 'white', border: 'none', borderRadius: '6px', padding: '8px', cursor: 'pointer' }} title="حذف البند">
+                        <button type="button" onClick={() => handleRemoveQuoteItem(index)} style={{ background: '#ef4444', color: 'white', border: 'none', borderRadius: '6px', padding: '8px', cursor: 'pointer', marginTop: '16px' }} title="حذف البند">
                           <FiTrash2 size={16} />
                         </button>
                       )}
-                    </div>
-                    <textarea 
-                      style={{ ...inputStyle, margin: 0, height: '55px', resize: 'vertical' }} 
-                      placeholder="وصف الخدمة التفصيلي..." 
-                      value={item.description} 
-                      onChange={e => handleQuoteItemChange(index, 'description', e.target.value)} 
-                    />
-                    <div style={{ fontSize: '0.82rem', color: '#64748b', textAlign: 'left' }}>
-                      إجمالي البند: <strong style={{ color: '#16a34a' }}>{(cleanPrice(item.quantity) * cleanPrice(item.unitPrice)).toLocaleString()} ر.س</strong>
                     </div>
                   </div>
                 ))}
               </div>
 
               <div style={{ background: '#f1f5f9', padding: '12px 15px', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                <span style={{ fontWeight: 'bold', color: '#1e293b' }}>الإجمالي الكلي (غير شامل الضريبة):</span>
-                <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#16a34a' }}>{calculateQuoteSubtotal().toLocaleString()} ر.س</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <label style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#1e293b' }}>نسبة الخصم الإضافي على عرض السعر (%):</label>
+                  <input type="number" min="0" max="100" style={{ width: '70px', padding: '6px', borderRadius: '6px', border: '1px solid #cbd5e1' }} value={newQuote.discount} onChange={e => setNewQuote({...newQuote, discount: cleanPrice(e.target.value)})} />
+                </div>
+                <div>
+                  <span style={{ fontWeight: 'bold', color: '#1e293b', marginLeft: '10px' }}>الإجمالي الكلي:</span>
+                  <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#16a34a' }}>{calculateQuoteSubtotal().toLocaleString()} ر.س</span>
+                </div>
               </div>
 
               <label style={labelStyle}>الشروط والأحكام:</label>
@@ -903,16 +977,18 @@ export default function SalesContractsPage() {
         </div>
       )}
 
-      {/* مودال الفواتير الضريبية مع البنود المتعددة */}
       {isInvoiceModalOpen && (
         <div style={modalOverlay}>
-          <div style={{ ...modalContent, maxWidth: '750px' }}>
+          <div style={{ ...modalContent, maxWidth: '850px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-              <h3 style={{ margin: 0, color: '#1e293b', fontWeight: 'bold' }}>💰 فاتورة ضريبية رسمية تفصيلية</h3>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <img src={noorcastLogoUrl} alt="Logo" style={{ height: '30px', objectFit: 'contain' }} />
+                <h3 style={{ margin: 0, color: '#1e293b', fontWeight: 'bold' }}>{editingInvoiceId ? '✏️ تعديل الفاتورة الصادرة' : '💰 فاتورة ضريبية رسمية تفصيلية'}</h3>
+              </div>
               <button onClick={() => setIsInvoiceModalOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}><FiX size={20} /></button>
             </div>
             
-            <form onSubmit={handleCreateInvoice}>
+            <form onSubmit={handleSaveInvoiceModal}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
                 <div>
                   <label style={labelStyle}>اسم العميل *</label>
@@ -926,61 +1002,54 @@ export default function SalesContractsPage() {
 
               <div style={{ margin: '15px 0 10px 0', borderTop: '1px solid #e2e8f0', paddingTop: '15px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                  <label style={{ ...labelStyle, fontSize: '0.95rem', color: '#2563eb' }}>بنود الفاتورة (الخدمة - الكمية - الوصف - سعر الوحدة):</label>
+                  <label style={{ ...labelStyle, fontSize: '0.95rem', color: '#2563eb' }}>بنود الفاتورة (الخدمة - التفاصيل - الكمية - السعر - الخصم %):</label>
                   <button type="button" onClick={handleAddInvoiceItem} style={{ background: '#2563eb', color: 'white', border: 'none', borderRadius: '6px', padding: '6px 12px', fontSize: '0.85rem', cursor: 'pointer', fontWeight: 'bold' }}>
                     + إضافة بند جديد
                   </button>
                 </div>
 
                 {newInvoice.items.map((item, index) => (
-                  <div key={index} style={{ background: '#f8fafc', padding: '12px', borderRadius: '8px', border: '1px solid #cbd5e1', marginBottom: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                      <input 
-                        style={{ ...inputStyle, flex: 2, margin: 0 }} 
-                        placeholder="اسم الخدمة (مثل: مونتاج فيديو)" 
-                        value={item.serviceName} 
-                        onChange={e => handleInvoiceItemChange(index, 'serviceName', e.target.value)} 
-                        required 
-                      />
-                      <input 
-                        type="number" 
-                        style={{ ...inputStyle, width: '90px', margin: 0 }} 
-                        placeholder="الكمية" 
-                        value={item.quantity} 
-                        min="1"
-                        onChange={e => handleInvoiceItemChange(index, 'quantity', e.target.value)} 
-                        required 
-                      />
-                      <input 
-                        type="number" 
-                        style={{ ...inputStyle, width: '130px', margin: 0 }} 
-                        placeholder="سعر الوحدة (ر.س)" 
-                        value={item.unitPrice} 
-                        onChange={e => handleInvoiceItemChange(index, 'unitPrice', e.target.value)} 
-                        required 
-                      />
+                  <div key={index} style={{ background: '#f8fafc', padding: '12px', borderRadius: '8px', border: '1px solid #cbd5e1', marginBottom: '10px', display: 'grid', gridTemplateColumns: '2fr 2.5fr 0.8fr 1.2fr 1fr auto', gap: '8px', alignItems: 'center' }}>
+                    <div>
+                      <label style={{ fontSize: '0.75rem', color: '#64748b' }}>الخدمة</label>
+                      <input style={{ ...inputStyle, margin: 0, padding: '8px' }} placeholder="اسم الخدمة" value={item.serviceName} onChange={e => handleInvoiceItemChange(index, 'serviceName', e.target.value)} required />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '0.75rem', color: '#64748b' }}>التفاصيل</label>
+                      <input style={{ ...inputStyle, margin: 0, padding: '8px' }} placeholder="وصف الخدمة" value={item.description} onChange={e => handleInvoiceItemChange(index, 'description', e.target.value)} />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '0.75rem', color: '#64748b' }}>الكمية</label>
+                      <input type="number" min="1" style={{ ...inputStyle, margin: 0, padding: '8px' }} value={item.quantity} onChange={e => handleInvoiceItemChange(index, 'quantity', e.target.value)} required />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '0.75rem', color: '#64748b' }}>السعر (ر.س)</label>
+                      <input type="number" step="0.01" style={{ ...inputStyle, margin: 0, padding: '8px' }} value={item.unitPrice} onChange={e => handleInvoiceItemChange(index, 'unitPrice', e.target.value)} required />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '0.75rem', color: '#64748b' }}>الخصم (%)</label>
+                      <input type="number" min="0" max="100" style={{ ...inputStyle, margin: 0, padding: '8px' }} value={item.discountPercent} onChange={e => handleInvoiceItemChange(index, 'discountPercent', e.target.value)} />
+                    </div>
+                    <div>
                       {newInvoice.items.length > 1 && (
-                        <button type="button" onClick={() => handleRemoveInvoiceItem(index)} style={{ background: '#ef4444', color: 'white', border: 'none', borderRadius: '6px', padding: '8px', cursor: 'pointer' }} title="حذف البند">
+                        <button type="button" onClick={() => handleRemoveInvoiceItem(index)} style={{ background: '#ef4444', color: 'white', border: 'none', borderRadius: '6px', padding: '8px', cursor: 'pointer', marginTop: '16px' }} title="حذف البند">
                           <FiTrash2 size={16} />
                         </button>
                       )}
-                    </div>
-                    <textarea 
-                      style={{ ...inputStyle, margin: 0, height: '55px', resize: 'vertical' }} 
-                      placeholder="وصف الخدمة التفصيلي..." 
-                      value={item.description} 
-                      onChange={e => handleInvoiceItemChange(index, 'description', e.target.value)} 
-                    />
-                    <div style={{ fontSize: '0.82rem', color: '#64748b', textAlign: 'left' }}>
-                      إجمالي البند: <strong style={{ color: '#16a34a' }}>{(cleanPrice(item.quantity) * cleanPrice(item.unitPrice)).toLocaleString()} ر.س</strong>
                     </div>
                   </div>
                 ))}
               </div>
 
               <div style={{ background: '#f1f5f9', padding: '12px 15px', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                <span style={{ fontWeight: 'bold', color: '#1e293b' }}>الإجمالي الكلي (شامل الضريبة 15%):</span>
-                <span style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#16a34a' }}>{(calculateInvoiceSubtotal() * 1.15).toLocaleString()} ر.س</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <label style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#1e293b' }}>نسبة الخصم الإضافي على الفاتورة (%):</label>
+                  <input type="number" min="0" max="100" style={{ width: '70px', padding: '6px', borderRadius: '6px', border: '1px solid #cbd5e1' }} value={newInvoice.discount} onChange={e => setNewInvoice({...newInvoice, discount: cleanPrice(e.target.value)})} />
+                </div>
+                <div>
+                  <span style={{ fontWeight: 'bold', color: '#1e293b', marginLeft: '10px' }}>الإجمالي الكلي (شامل الضريبة 15%):</span>
+                  <span style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#16a34a' }}>{(calculateInvoiceSubtotal() * 1.15).toLocaleString()} ر.س</span>
+                </div>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
@@ -1003,7 +1072,7 @@ export default function SalesContractsPage() {
               <input type="file" accept=".pdf" style={{ marginBottom: '15px' }} onChange={(e: any) => setNewInvoice({...newInvoice, file: e.target.files[0]})} />
 
               <div style={{ display: 'flex', gap: '10px', marginTop: '15px', justifyContent: 'flex-end' }}>
-                <button type="submit" style={primaryBtn} disabled={isSubmitting}>{isSubmitting ? 'جاري الإصدار والحفظ...' : 'إصدار سحابياً 🖨️'}</button>
+                <button type="submit" style={primaryBtn} disabled={isSubmitting}>{isSubmitting ? 'جاري الإصدار والحفظ...' : (editingInvoiceId ? 'تحديث الفاتورة سحابياً 🔄' : 'إصدار سحابياً 🖨️')}</button>
                 <button type="button" onClick={() => setIsInvoiceModalOpen(false)} style={cancelBtn} disabled={isSubmitting}>إلغاء ❌</button>
               </div>
             </form>
@@ -1168,6 +1237,7 @@ export default function SalesContractsPage() {
                       <td style={{ ...tdStyle, whiteSpace: 'nowrap' }}>
                         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                           <button onClick={() => handlePrintDocument(inv, 'invoice')} style={actionBtn}>طباعة</button>
+                          <button onClick={() => handleEditInvoice(inv)} style={iconEditBtn} title="تعديل"><FiEdit2 /></button>
                           <button onClick={() => handleDeleteInvoice(inv.id)} style={iconDeleteBtn} title="حذف"><FiTrash2 /></button>
                         </div>
                       </td>
@@ -1201,6 +1271,7 @@ export default function SalesContractsPage() {
 
                     <div style={{ display: 'flex', gap: '6px' }}>
                       <button onClick={() => handlePrintDocument(inv, 'invoice')} style={actionBtn}>طباعة</button>
+                      <button onClick={() => handleEditInvoice(inv)} style={iconEditBtn}><FiEdit2 /></button>
                       <button onClick={() => handleDeleteInvoice(inv.id)} style={iconDeleteBtn}><FiTrash2 /></button>
                     </div>
                   </div>

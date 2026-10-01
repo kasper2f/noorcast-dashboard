@@ -73,23 +73,8 @@ export default function ExpensesPage() {
       const allBills = [...localBills, ...(Array.isArray(cloudBills) ? cloudBills : [])];
       const uniqueBills = Array.from(new Map(allBills.map((item: any) => [item.id || item.supplier, item])).values());
 
-      let formattedExpenses = Array.isArray(sheetExpenses) ? sheetExpenses.map((item: any, index: number) => ({
-        id: String(item.id || 'sheet-' + index),
-        description: String(item.description || ''),
-        category: String(item.category || 'تشغيل'),
-        amount: cleanPrice(item.amount),
-        responsible: String(item.responsible || 'الإدارة'),
-        type: String(item.type || 'مصروف'),
-        date: String(item.date || new Date().toISOString().split('T')[0])
-      })) : [];
-
-      formattedExpenses = formattedExpenses.filter(e => {
-        const desc = String(e.description || '').toLowerCase();
-        const amount = cleanPrice(e.amount);
-        return amount > 0 && amount !== 5750 && !desc.includes('مقدم فاتورة') && !desc.includes('inv-2026-001') && !desc.includes('مصروف وارد');
-      });
-
-      setExpenses(formattedExpenses);
+      // لا زلنا نجلب باقي الداتا لعرضها في الجداول الأخرى
+      setExpenses(Array.isArray(sheetExpenses) ? sheetExpenses : []);
       setInvoices(uniqueInvoices);
       setIncomingBills(uniqueBills);
       setHrPayroll(Array.isArray(hrData) ? hrData : []);
@@ -117,7 +102,6 @@ export default function ExpensesPage() {
     date: new Date().toISOString().split('T')[0]  
   });
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
 
   const getEffectiveFinancials = (item: any) => {
     const status = String(item.status || '').trim();
@@ -137,6 +121,7 @@ export default function ExpensesPage() {
     return { ratio, effectiveTotal, effectiveVat, effectiveBasic, statusLabel: status };
   };
 
+  // 💡 1. الإيرادات: تعتمد فقط على الفواتير الصادرة المسددة
   const paidInvoicesList = invoices.map(inv => {
     const financials = getEffectiveFinancials(inv);
     return { ...inv, financials };
@@ -145,40 +130,34 @@ export default function ExpensesPage() {
   const totalRevenues = paidInvoicesList.reduce((sum, inv) => sum + cleanPrice(inv.financials.effectiveTotal), 0);
   const totalInvoicesVat = paidInvoicesList.reduce((sum, inv) => sum + cleanPrice(inv.financials.effectiveVat), 0);
 
-  const validExpenses = expenses.filter(e => {
-    const t = String(e.type || '').trim().toLowerCase();
-    const amount = cleanPrice(e.amount);
-    return t !== 'إيراد' && t !== 'irad' && amount > 0;
-  });
-
-  const filteredIncomingBillsForCalc = incomingBills.filter(b => {
-    const status = String(b.status || '').trim();
-    if (status !== 'مسددة') return false;
-    
-    const isTaxable = b.isTaxable !== false && b.isTaxable !== 'false' && b.isTaxable !== 'FALSE';
+  // 💡 2. المصروفات: تعتمد فقط على الفواتير الواردة المسددة
+  const paidIncomingBillsList = incomingBills.map(bill => {
+    const financials = getEffectiveFinancials(bill);
+    return { ...bill, financials };
+  }).filter(bill => {
+    // فلتر الدفع
+    if (bill.financials.ratio === 0) return false;
+    // فلتر الضريبة
+    const isTaxable = bill.isTaxable !== false && bill.isTaxable !== 'false' && bill.isTaxable !== 'FALSE';
     if (taxFilterMode === 'taxable_only' && !isTaxable) return false;
     return true;
   });
 
-  const totalExpenses = validExpenses.reduce((sum, e) => sum + cleanPrice(e.amount), 0) +  
-    filteredIncomingBillsForCalc.reduce((sum, b) => sum + cleanPrice(b.amount), 0);
+  const totalExpenses = paidIncomingBillsList.reduce((sum, bill) => sum + cleanPrice(bill.financials.effectiveTotal), 0);
   
-  const totalBillsVat = filteredIncomingBillsForCalc
+  const totalBillsVat = paidIncomingBillsList
+    .filter(b => b.isTaxable !== false && b.isTaxable !== 'false' && b.isTaxable !== 'FALSE')
+    .reduce((sum, b) => sum + cleanPrice(b.financials.effectiveVat), 0);
+
+  // 💡 3. الالتزامات: تعتمد فقط على الفواتير الواردة غير المسددة
+  const totalLiabilities = incomingBills
     .filter(b => {
-      const isTaxable = b.isTaxable !== false && b.isTaxable !== 'false' && b.isTaxable !== 'FALSE';
-      return isTaxable;
+      const status = String(b.status || '').trim();
+      return status === 'قيد الانتظار' || status === 'معلق' || status === 'غير مسددة';
     })
-    .reduce((sum, b) => sum + (cleanPrice(b.amount) * (15 / 115)), 0);
+    .reduce((sum, b) => sum + cleanPrice(b.amount || b.total), 0);
 
-  const billsLiabilities = incomingBills
-    .filter(b => String(b.status || '').trim() === 'قيد الانتظار' || String(b.status || '').trim() === 'معلق')
-    .reduce((sum, b) => sum + cleanPrice(b.amount), 0);
-
-  const freelanceLiabilities = freelanceFinance
-    .filter(f => String(f.status || '').includes('معلق'))
-    .reduce((sum, f) => sum + cleanPrice(f.actualCost), 0);
-
-  const totalLiabilities = billsLiabilities + freelanceLiabilities;
+  // 💡 4. صافي الضريبة والأرباح
   const netVatDue = totalInvoicesVat - totalBillsVat;
   const netActualProfit = totalRevenues - totalExpenses - totalLiabilities - (netVatDue > 0 ? netVatDue : 0);
 
@@ -200,17 +179,13 @@ export default function ExpensesPage() {
     ];
 
     paidInvoicesList.forEach((inv: any) => {
-      reportRows.push(["فاتورة صادرة", "إيراد", "مبيعات", cleanPrice(inv.financials.effectiveTotal), inv.financials.statusLabel, formatDateClean(inv.dueDate)]);
+      reportRows.push(["فاتورة صادرة", "إيراد", "مبيعات", cleanPrice(inv.financials.effectiveTotal), inv.financials.statusLabel, formatDateClean(inv.dueDate || inv.date)]);
     });
 
-    validExpenses.forEach((e: any) => {
-      reportRows.push([e.description, e.type, e.category, -cleanPrice(e.amount), "مسجل", formatDateClean(e.date)]);
-    });
-
-    filteredIncomingBillsForCalc.forEach((b: any) => {
+    paidIncomingBillsList.forEach((b: any) => {
       const isTax = b.isTaxable !== false && b.isTaxable !== 'false' && b.isTaxable !== 'FALSE';
       const billDesc = isTax ? "فاتورة واردة - خاضعة للضريبة" : "فاتورة واردة - غير خاضعة للضريبة";
-      reportRows.push([billDesc, "مصروف", b.category, -cleanPrice(b.amount), b.status, formatDateClean(b.dueDate)]);
+      reportRows.push([billDesc, "مصروف", b.category || b.supplier, -cleanPrice(b.financials.effectiveTotal), b.financials.statusLabel, formatDateClean(b.dueDate || b.date)]);
     });
 
     const csvContent = "\uFEFF" + reportRows.map(e => e.join(",")).join("\n");
@@ -251,7 +226,6 @@ export default function ExpensesPage() {
 
   const resetForm = () => {
     setFormData({ id: '', description: '', category: 'تشغيل', amount: '', responsible: '', type: 'مصروف', date: new Date().toISOString().split('T')[0] });
-    setEditingId(null);
     setIsModalOpen(false);
   };
 
@@ -344,7 +318,7 @@ export default function ExpensesPage() {
               
               {/* 1. جدول اللابتوب */}
               <div className="desktop-table-view" style={{ overflowX: 'auto', background: '#1e293b', padding: '20px', borderRadius: '16px', border: '1px solid #334155', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.2)' }}>
-                <h3 style={{ marginTop: 0, color: 'white', fontSize: '1.1rem' }}>سجل الحركات المالية</h3>
+                <h3 style={{ marginTop: 0, color: 'white', fontSize: '1.1rem' }}>سجل الحركات المالية (فواتير صادرة وواردة فقط)</h3>
                 <table style={{ width: '100%', borderCollapse: 'collapse', color: 'white', marginTop: '10px', minWidth: '900px' }}>
                   <thead>
                     <tr style={{ borderBottom: '2px solid #334155', background: '#0f172a', color: '#94a3b8' }}>
@@ -360,32 +334,21 @@ export default function ExpensesPage() {
                         <td style={{ ...tdStyle, color: '#4ade80', fontWeight: 'bold' }}>+{cleanPrice(inv.financials.effectiveTotal).toLocaleString()} ر.س</td>
                         <td style={tdStyle}>{inv.client}</td>
                         <td style={tdStyle}>{inv.financials.statusLabel}</td>
-                        <td style={{ ...tdStyle, color: '#f59e0b', fontWeight: 'bold' }}>{formatDateClean(inv.dueDate)}</td>
+                        <td style={{ ...tdStyle, color: '#f59e0b', fontWeight: 'bold' }}>{formatDateClean(inv.dueDate || inv.date)}</td>
                       </tr>
                     ))}
-                    {validExpenses.map((e: any, index: number) => (
-                      <tr key={`exp-${e.id}`} style={{ borderBottom: '1px solid #334155', background: index % 2 === 0 ? '#1e293b' : '#1a2638' }}>
-                        <td style={{ ...tdStyle, fontWeight: 'bold' }}>{e.description}</td>
-                        <td style={{ ...tdStyle, color: '#f87171', fontWeight: 'bold' }}>مصروف</td>
-                        <td style={tdStyle}>{e.category}</td>
-                        <td style={{ ...tdStyle, color: '#f87171', fontWeight: 'bold' }}>-{cleanPrice(e.amount).toLocaleString()} ر.س</td>
-                        <td style={tdStyle}>{e.responsible}</td>
-                        <td style={tdStyle}>مسجل</td>
-                        <td style={{ ...tdStyle, color: '#f59e0b', fontWeight: 'bold' }}>{formatDateClean(e.date)}</td>
-                      </tr>
-                    ))}
-                    {filteredIncomingBillsForCalc.map((b: any, index: number) => {
+                    {paidIncomingBillsList.map((b: any, index: number) => {
                       const isTax = b.isTaxable !== false && b.isTaxable !== 'false' && b.isTaxable !== 'FALSE';
                       const billSourceText = isTax ? "فاتورة واردة - خاضعة للضريبة" : "فاتورة واردة - غير خاضعة للضريبة";
                       return (
-                        <tr key={`bill-${b.id}`} style={{ borderBottom: '1px solid #334155', background: index % 2 === 0 ? '#1e293b' : '#1a2638' }}>
+                        <tr key={`bill-${b.id}`} style={{ borderBottom: '1px solid #334155', background: (index + paidInvoicesList.length) % 2 === 0 ? '#1e293b' : '#1a2638' }}>
                           <td style={{ ...tdStyle, fontWeight: 'bold' }}>{billSourceText}</td>
                           <td style={{ ...tdStyle, color: '#f87171', fontWeight: 'bold' }}>مصروف</td>
-                          <td style={tdStyle}>{b.category}</td>
-                          <td style={{ ...tdStyle, color: '#f87171', fontWeight: 'bold' }}>-{cleanPrice(b.amount).toLocaleString()} ر.س</td>
+                          <td style={tdStyle}>{b.category || b.supplier}</td>
+                          <td style={{ ...tdStyle, color: '#f87171', fontWeight: 'bold' }}>-{cleanPrice(b.financials.effectiveTotal).toLocaleString()} ر.س</td>
                           <td style={tdStyle}>{b.supplier}</td>
-                          <td style={tdStyle}>{b.status}</td>
-                          <td style={{ ...tdStyle, color: '#f59e0b', fontWeight: 'bold' }}>{formatDateClean(b.dueDate)}</td>
+                          <td style={tdStyle}>{b.financials.statusLabel}</td>
+                          <td style={{ ...tdStyle, color: '#f59e0b', fontWeight: 'bold' }}>{formatDateClean(b.dueDate || b.date)}</td>
                         </tr>
                       );
                     })}
@@ -399,7 +362,7 @@ export default function ExpensesPage() {
                   <div key={`inv-m-${inv.id}`} style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '14px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px', color: 'white' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span style={{ fontWeight: 'bold', color: '#4ade80' }}>فاتورة صادرة</span>
-                      <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>📅 {formatDateClean(inv.dueDate)}</span>
+                      <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>📅 {formatDateClean(inv.dueDate || inv.date)}</span>
                     </div>
                     <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#f8fafc' }}>العميل: {inv.client}</div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #334155', paddingTop: '8px' }}>
@@ -408,32 +371,20 @@ export default function ExpensesPage() {
                     </div>
                   </div>
                 ))}
-                {validExpenses.map((e: any) => (
-                  <div key={`exp-m-${e.id}`} style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '14px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px', color: 'white' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontWeight: 'bold', color: '#f87171' }}>مصروف ({e.category})</span>
-                      <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>📅 {formatDateClean(e.date)}</span>
-                    </div>
-                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#f8fafc' }}>{e.description}</div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #334155', paddingTop: '8px' }}>
-                      <span style={{ color: '#f87171', fontWeight: 'bold', fontSize: '1.05rem' }}>-{cleanPrice(e.amount).toLocaleString()} ر.س</span>
-                      <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>المسؤول: {e.responsible}</span>
-                    </div>
-                  </div>
-                ))}
-                {filteredIncomingBillsForCalc.map((b: any) => {
+                
+                {paidIncomingBillsList.map((b: any) => {
                   const isTax = b.isTaxable !== false && b.isTaxable !== 'false' && b.isTaxable !== 'FALSE';
-                  const billSourceText = isTax ? "فاتورة واردة - خاضعة للضريبة" : "فاتورة واردة - غير خاضعة للضريبة";
+                  const billSourceText = isTax ? "فاتورة واردة (خاضعة للضريبة)" : "فاتورة واردة (غير خاضعة للضريبة)";
                   return (
                     <div key={`bill-m-${b.id}`} style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '14px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px', color: 'white' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <span style={{ fontWeight: 'bold', color: '#f87171' }}>{billSourceText}</span>
-                        <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>📅 {formatDateClean(b.dueDate)}</span>
+                        <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>📅 {formatDateClean(b.dueDate || b.date)}</span>
                       </div>
                       <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#f8fafc' }}>المورد: {b.supplier}</div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #334155', paddingTop: '8px' }}>
-                        <span style={{ color: '#f87171', fontWeight: 'bold', fontSize: '1.05rem' }}>-{cleanPrice(b.amount).toLocaleString()} ر.س</span>
-                        <span style={{ padding: '3px 8px', borderRadius: '4px', background: '#334155', fontSize: '0.75rem' }}>{b.status}</span>
+                        <span style={{ color: '#f87171', fontWeight: 'bold', fontSize: '1.05rem' }}>-{cleanPrice(b.financials.effectiveTotal).toLocaleString()} ر.س</span>
+                        <span style={{ padding: '3px 8px', borderRadius: '4px', background: '#334155', fontSize: '0.75rem' }}>{b.financials.statusLabel}</span>
                       </div>
                     </div>
                   );
