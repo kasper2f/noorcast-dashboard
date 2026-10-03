@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { getIncomingBillsSheet, saveIncomingBillToSheet, deleteIncomingBillFromSheet } from '@/services/dbService'; // 💡 إضافة دالة الحذف
+// 💡 استيراد الدوال المستقلة الجديدة بدلاً من دوال IncomingBills
+import { getFixedExpensesSheet, saveFixedExpenseToSheet, deleteFixedExpenseFromSheet } from '@/services/dbService'; 
 import { FiPlus, FiSave, FiTrash2, FiRefreshCw, FiDownload, FiSearch, FiEdit3 } from 'react-icons/fi';
 
 export default function FixedExpensesPage() {
@@ -35,7 +36,6 @@ export default function FixedExpensesPage() {
     return isNaN(num) ? 0 : num;
   };
 
-  // --- دالة تنسيق التاريخ ليكون (يوم/شهر/سنة) بدقة وبدون أصفار إضافية ---
   const formatDateClean = (dateStr: string) => {
     if (!dateStr) return '-';
     try {
@@ -55,29 +55,29 @@ export default function FixedExpensesPage() {
     }
   };
 
-  // سحب المصروفات الثابتة والالتزامات سحابياً من قوقل شيت
+  // 💡 الجلب من الشيت المستقل
   const loadFixedExpensesFromCloud = async (isManualRefresh = false) => {
     try {
       setLoading(true);
-      const sheetData = await getIncomingBillsSheet(isManualRefresh); // 💡 استخدام forceRefresh
+      const sheetData = await getFixedExpensesSheet(isManualRefresh);
       if (Array.isArray(sheetData)) {
         const mapped = sheetData.map((item: any, index: number) => ({
           id: String(item.id || 'fix-' + index),
-          description: String(item.supplier || item.description || ''),
+          description: String(item.description || ''),
           category: String(item.category || 'اشتراكات وبنية تحتية'),
           amount: cleanPrice(item.amount),
-          billingCycle: String(item.billingCycle || item.frequency || 'شهري'),
+          billingCycle: String(item.billingCycle || 'شهري'),
           responsible: String(item.responsible || 'الإدارة'),
-          date: String(item.dueDate || item.date || new Date().toISOString().split('T')[0]),
+          date: String(item.date || new Date().toISOString().split('T')[0]),
           status: String(item.status || 'قيد الانتظار')
         }));
         setFixedExpenses(mapped);
       }
       if (isManualRefresh) {
-        alert("✅ تم تحديث بيانات المصروفات الثابتة من السحابة بنجاح!");
+        alert("✅ تم تحديث بيانات الالتزامات كمسودة من السحابة بنجاح!");
       }
     } catch (error) {
-      console.error("خطأ في جلب المصروفات الثابتة سحابياً:", error);
+      console.error("خطأ في جلب الالتزامات سحابياً:", error);
       if (isManualRefresh) {
         alert("❌ حدث خطأ أثناء الاتصال بالسحابة.");
       }
@@ -86,6 +86,7 @@ export default function FixedExpensesPage() {
     }
   };
 
+  // 💡 الحفظ السحابي في الشيت المستقل
   const handleSave = async () => {
     if (!formData.description || !formData.amount) {
       alert("الرجاء إدخال الوصف والمبلغ.");
@@ -94,34 +95,30 @@ export default function FixedExpensesPage() {
 
     const numericAmount = cleanPrice(formData.amount);
     const itemData = {
-      id: editingId || ('BILL-' + Date.now()), // 💡 عدلناها لـ BILL لتتوافق مع نظام الحذف
-      supplier: formData.description,
+      id: editingId || ('FIX-' + Date.now()), // معرف مستقل
       description: formData.description,
       category: formData.category,
       amount: numericAmount,
       billingCycle: formData.billingCycle,
-      frequency: formData.billingCycle,
       responsible: formData.responsible || 'الإدارة',
-      dueDate: formData.date,
       date: formData.date,
       status: formData.status
     };
 
     try {
       setLoading(true);
-      await saveIncomingBillToSheet(itemData);
+      await saveFixedExpenseToSheet(itemData);
 
       if (editingId) {
         setFixedExpenses(fixedExpenses.map((item: any) => item.id === editingId ? { ...item, ...formData, amount: numericAmount } : item));
       } else {
-        setFixedExpenses([{ ...itemData, date: itemData.dueDate }, ...fixedExpenses]);
+        setFixedExpenses([{ ...itemData }, ...fixedExpenses]);
       }
 
       resetForm();
-      alert("تم حفظ المصروف الثابت وتحديث حالة السداد وترحيله سحابياً بنجاح! ☁️✅");
-      await loadFixedExpensesFromCloud(false);
+      alert("تم حفظ الالتزام المرجعي سحابياً بنجاح! ☁️✅");
     } catch (error) {
-      console.error("فشل الحفظ السحابي للمصروف الثابت:", error);
+      console.error("فشل الحفظ السحابي للالتزام:", error);
       alert("حدث خطأ أثناء الحفظ السحابي.");
     } finally {
       setLoading(false);
@@ -147,7 +144,7 @@ export default function FixedExpensesPage() {
     setEditingId(item.id);
     setFormData({
       id: item.id,
-      description: item.description || item.supplier || '',
+      description: item.description || '',
       category: item.category || 'اشتراكات وبنية تحتية',
       amount: item.amount || '',
       billingCycle: item.billingCycle || 'شهري',
@@ -158,12 +155,12 @@ export default function FixedExpensesPage() {
     setIsModalOpen(true);
   };
 
-  // 💡 إضافة الحذف السحابي الفعلي
+  // 💡 الحذف السحابي الفعلي المستقل
   const deleteItem = async (id: string) => {
-    if (confirm("هل أنت متأكد من حذف هذا المصروف الثابت نهائياً من السحابة؟")) {
+    if (confirm("هل أنت متأكد من حذف هذا الالتزام المرجعي نهائياً من السحابة؟")) {
       try {
         setLoading(true);
-        await deleteIncomingBillFromSheet(id);
+        await deleteFixedExpenseFromSheet(id);
         setFixedExpenses(fixedExpenses.filter((item: any) => item.id !== id));
         alert("تم الحذف من السحابة بنجاح! ✅");
       } catch (error) {
@@ -239,8 +236,8 @@ export default function FixedExpensesPage() {
       {/* رأس الصفحة */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px', marginBottom: '25px' }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: '1.85rem', fontWeight: 'bold' }}>الالتزامات الدورية</h1>
-          <p style={{ color: '#94a3b8', fontSize: '0.95rem', margin: '6px 0 0 0' }}>قائمة سحابية مشتركة لمتابعة الاشتراكات والالتزامات وحالات سدادها لفتراتها</p>
+          <h1 style={{ margin: 0, fontSize: '1.85rem', fontWeight: 'bold' }}>مسودة الالتزامات الدورية</h1>
+          <p style={{ color: '#94a3b8', fontSize: '0.95rem', margin: '6px 0 0 0' }}>قائمة مرجعية فقط ولا تؤثر على حسابات الإيرادات والمصروفات</p>
         </div>
         
         <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
@@ -251,7 +248,7 @@ export default function FixedExpensesPage() {
             <FiRefreshCw className={loading ? "spinning-icon" : ""} /> {loading ? 'جاري المزامنة...' : 'مزامنة سحابية 🔄'}
           </button>
           <button onClick={() => setIsModalOpen(true)} style={primaryBtn}>
-            <FiPlus /> إضافة مصروف ثابت
+            <FiPlus /> إضافة مرجع التزام
           </button>
         </div>
       </div>
@@ -290,20 +287,20 @@ export default function FixedExpensesPage() {
             onChange={(e) => setFilterStatus(e.target.value)}
             style={{ padding: '10px 15px', borderRadius: '10px', border: '1px solid #334155', background: '#0f172a', color: 'white', cursor: 'pointer', outline: 'none', fontSize: '0.9rem' }}
           >
-            <option value="الكل">كل حالات السداد</option>
-            <option value="مسددة">مسددة لهذه الفترة ✅</option>
-            <option value="قيد الانتظار">قيد الانتظار ⏳</option>
+            <option value="الكل">كل الحالات المرجعية</option>
+            <option value="مسددة">مسددة (مؤشر) ✅</option>
+            <option value="قيد الانتظار">قيد الانتظار (مؤشر) ⏳</option>
           </select>
         </div>
 
         <div style={{ background: '#0f172a', padding: '10px 20px', borderRadius: '10px', border: '1px solid #334155', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{ color: '#94a3b8', fontSize: '0.85rem' }}>الإجمالي المفلتر:</span>
+          <span style={{ color: '#94a3b8', fontSize: '0.85rem' }}>إجمالي الالتزامات كمسودة:</span>
           <strong style={{ color: '#f87171', fontSize: '1.1rem' }}>{totalFixedExpenses.toLocaleString()} ر.س</strong>
         </div>
       </div>
 
       {loading && fixedExpenses.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '60px', color: '#38bdf8', fontSize: '1rem', fontWeight: 'bold' }}>جاري المزامنة السحابية للمصروفات الثابتة... 🔄</div>
+        <div style={{ textAlign: 'center', padding: '60px', color: '#38bdf8', fontSize: '1rem', fontWeight: 'bold' }}>جاري المزامنة المرجعية السحابية... 🔄</div>
       ) : (
         <>
           {/* 1. عرض الشاشات الكبيرة واللابتوب (Desktop Table View) */}
@@ -311,7 +308,7 @@ export default function FixedExpensesPage() {
             <table style={{ width: '100%', borderCollapse: 'collapse', color: 'white', minWidth: '900px' }}>
               <thead>
                 <tr style={{ borderBottom: '2px solid #334155', background: '#0f172a' }}>
-                  {['وصف المصروف / الاشتراك', 'التصنيف', 'دورية السداد', 'المبلغ', 'حالة السداد للفترة', 'المسؤول', 'التاريخ', 'إجراء'].map(h => (
+                  {['وصف المصروف / الاشتراك', 'التصنيف', 'دورية السداد', 'المبلغ', 'مؤشر حالة السداد', 'المسؤول', 'التاريخ', 'إجراء'].map(h => (
                     <th key={h} style={thStyle}>{h}</th>
                   ))}
                 </tr>
@@ -334,7 +331,7 @@ export default function FixedExpensesPage() {
                       <td style={{ ...tdStyle, fontWeight: 'bold', color: '#f87171' }}>{cleanPrice(item.amount).toLocaleString()} ر.س</td>
                       <td style={tdStyle}>
                         <span style={{ padding: '6px 12px', borderRadius: '8px', background: item.status === 'مسددة' ? '#065f46' : '#b45309', color: 'white', fontSize: '0.85rem', fontWeight: 'bold', display: 'inline-block' }}>
-                          {item.status === 'مسددة' ? 'مسددة لهذه الفترة ✅' : 'قيد الانتظار ⏳'}
+                          {item.status === 'مسددة' ? 'مسددة (مؤشر) ✅' : 'قيد الانتظار ⏳'}
                         </span>
                       </td>
                       <td style={{ ...tdStyle, color: '#94a3b8' }}>{item.responsible || '-'}</td>
@@ -350,7 +347,7 @@ export default function FixedExpensesPage() {
                 ) : (
                   <tr>
                     <td colSpan={8} style={{ textAlign: 'center', padding: '50px', color: '#94a3b8', fontSize: '0.95rem' }}>
-                      لا توجد مصروفات ثابتة مسجلة سحابياً مطابقة لخيارات البحث.
+                      لا توجد التزامات مرجعية سحابية مطابقة لخيارات البحث.
                     </td>
                   </tr>
                 )}
@@ -366,7 +363,7 @@ export default function FixedExpensesPage() {
                   
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ padding: '4px 10px', borderRadius: '6px', background: item.status === 'مسددة' ? '#065f46' : '#b45309', color: '#fff', fontSize: '0.75rem', fontWeight: 'bold' }}>
-                      {item.status === 'مسددة' ? 'مسددة لهذه الفترة ✅' : 'قيد الانتظار ⏳'}
+                      {item.status === 'مسددة' ? 'مسددة (مؤشر) ✅' : 'قيد الانتظار ⏳'}
                     </span>
                     <span style={{ fontSize: '0.75rem', color: '#f59e0b', fontWeight: 'bold' }}>📅 {formatDateClean(item.date)}</span>
                   </div>
@@ -399,7 +396,7 @@ export default function FixedExpensesPage() {
               ))
             ) : (
               <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8', background: '#1e293b', borderRadius: '12px' }}>
-                لا توجد مصروفات ثابتة مسجلة سحابياً مطابقة لخيارات البحث.
+                لا توجد التزامات مرجعية سحابية مطابقة لخيارات البحث.
               </div>
             )}
           </div>
@@ -411,7 +408,7 @@ export default function FixedExpensesPage() {
         <div style={modalOverlay}>
           <div style={modalContent}>
             <h3 style={{ marginTop: 0, color: '#1e293b', fontWeight: 'bold', fontSize: '1.2rem', marginBottom: '20px' }}>
-              {editingId ? '✏️ تعديل المصروف الثابت' : '➕ إضافة مصروف ثابت جديد سحابياً'}
+              {editingId ? '✏️️ تعديل الالتزام كمسودة' : '➕ إضافة التزام مرجعي جديد سحابياً'}
             </h3>
             
             <label style={labelStyle}>وصف المصروف أو الاشتراك:</label>
@@ -434,10 +431,10 @@ export default function FixedExpensesPage() {
               <option value="مرة واحدة">مرة واحدة ⚡</option>
             </select>
 
-            <label style={labelStyle}>حالة السداد (لهذه الفترة):</label>
+            <label style={labelStyle}>مؤشر حالة السداد (لا يؤثر مالياً):</label>
             <select style={inputStyle} value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})}>
-              <option value="قيد الانتظار">قيد الانتظار (معلقة) ⏳</option>
-              <option value="مسددة">مسددة (لهذه الفترة) ✅</option>
+              <option value="قيد الانتظار">قيد الانتظار (مؤشر) ⏳</option>
+              <option value="مسددة">مسددة (مؤشر) ✅</option>
             </select>
             
             <label style={labelStyle}>المبلغ (ر.س):</label>
@@ -451,7 +448,7 @@ export default function FixedExpensesPage() {
 
             <div style={{ display: 'flex', gap: '10px', marginTop: '15px', justifyContent: 'flex-end' }}>
               <button onClick={handleSave} style={primaryBtn} disabled={loading}>
-                <FiSave /> {loading ? 'جاري الحفظ...' : 'حفظ سحابياً'}
+                <FiSave /> {loading ? 'جاري الحفظ...' : 'حفظ كمرجع سحابي'}
               </button>
               <button onClick={resetForm} style={cancelBtn} disabled={loading}>إلغاء</button>
             </div>

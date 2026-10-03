@@ -704,7 +704,7 @@ export const deleteTaskFromSheet = async (taskId: string) => {
 };
 
 // ==========================================
-// 💡 الدوال الجديدة المضافة أدناه (الحذف + إعدادات الشركة)
+// 💡 الدوال الجديدة المضافة أدناه (الحذف + إعدادات الشركة + الالتزامات المستقلة)
 // ==========================================
 
 // 1. جلب بيانات الشركة من السحابة
@@ -769,6 +769,29 @@ export const deleteIncomingBillFromSheet = async (id: string) => {
     await fetch(GOOGLE_SCRIPT_URL, {
       method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'deleteExpense', id: `EXP-BILL-${id}` })
+    });
+    return "Success";
+  } catch (error) { throw error; }
+};
+
+// 💡 6. دوال الالتزامات الدورية (مسودة مرجعية مستقلة فقط)
+export const getFixedExpensesSheet = async (forceRefresh = false) => safeFetchFromSheet('getFixedExpenses', 'FixedExpenses', forceRefresh);
+
+export const saveFixedExpenseToSheet = async (data: any) => {
+  try {
+    await fetch(GOOGLE_SCRIPT_URL, {
+      method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'saveFixedExpense', ...data })
+    });
+    return "Success";
+  } catch (error) { throw error; }
+};
+
+export const deleteFixedExpenseFromSheet = async (id: string) => {
+  try {
+    await fetch(GOOGLE_SCRIPT_URL, {
+      method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'deleteFixedExpense', id })
     });
     return "Success";
   } catch (error) { throw error; }
