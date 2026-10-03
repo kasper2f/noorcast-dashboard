@@ -10,7 +10,13 @@ import {
   getIncomingBillsSheet,
   getQuotesSheet,
   saveQuoteToSheet,
-  uploadFileToCloudinary
+  uploadFileToCloudinary,
+  // 💡 الدوال الجديدة التي استدعيناها
+  deleteQuoteFromSheet,
+  deleteInvoiceFromSheet,
+  deleteIncomingBillFromSheet,
+  getCompanyProfileSheet,
+  saveCompanyProfileToSheet
 } from '@/services/dbService';
 
 export default function SalesContractsPage() {
@@ -116,6 +122,15 @@ export default function SalesContractsPage() {
   });
 
   useEffect(() => {
+    // 💡 إضافة: جلب بيانات الشركة السحابية
+    const fetchCompanyData = async () => {
+      const cloudData = await getCompanyProfileSheet();
+      if (cloudData) {
+        setCompanyInfo(cloudData);
+        localStorage.setItem('noorcast_company_profile', JSON.stringify(cloudData));
+      }
+    };
+    fetchCompanyData();
     loadCloudDocuments();
   }, []);
 
@@ -199,8 +214,6 @@ export default function SalesContractsPage() {
       setLoadingCloud(false);
     }
   };
-
-  useEffect(() => { try { localStorage.setItem('noorcast_company_profile', JSON.stringify(companyInfo)); } catch {} }, [companyInfo]);
 
   const calculateItemSubtotal = (item: any) => {
     const qty = cleanPrice(item.quantity);
@@ -470,7 +483,19 @@ export default function SalesContractsPage() {
     });
     setIsQuoteModalOpen(true);
   };
-  const handleDeleteQuote = (id: string) => { if (confirm("حذف العرض؟")) setQuotes(quotes.filter(q => q.id !== id)); };
+  
+  // 💡 إضافة: أمر الحذف السحابي الحقيقي لعرض السعر
+  const handleDeleteQuote = async (id: string) => { 
+    if (confirm("هل أنت متأكد من حذف عرض السعر نهائياً من السحابة؟")) {
+      try {
+        setIsSubmitting(true);
+        await deleteQuoteFromSheet(id);
+        setQuotes(quotes.filter(q => q.id !== id)); 
+        alert("تم الحذف من السحابة بنجاح!");
+      } catch(e) { alert("حدث خطأ أثناء الحذف السحابي"); }
+      finally { setIsSubmitting(false); }
+    }
+  };
 
   const handleSaveInvoiceModal = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -551,9 +576,16 @@ export default function SalesContractsPage() {
     setIsInvoiceModalOpen(true);
   };
 
-  const handleDeleteInvoice = (id: string) => { 
-    if (confirm("حذف الفاتورة؟")) {
-      setInvoices(invoices.filter(i => i.id !== id)); 
+  // 💡 إضافة: أمر الحذف السحابي الحقيقي للفاتورة الصادرة
+  const handleDeleteInvoice = async (id: string) => { 
+    if (confirm("هل أنت متأكد من حذف الفاتورة نهائياً من السحابة؟")) {
+      try {
+        setIsSubmitting(true);
+        await deleteInvoiceFromSheet(id);
+        setInvoices(invoices.filter(i => i.id !== id)); 
+        alert("تم الحذف من السحابة بنجاح!");
+      } catch(e) { alert("حدث خطأ أثناء الحذف السحابي"); }
+      finally { setIsSubmitting(false); }
     }
   };
 
@@ -625,9 +657,16 @@ export default function SalesContractsPage() {
     }
   };
 
-  const handleDeleteBill = (id: string) => { 
-    if (confirm("حذف الفاتورة؟")) {
-      setIncomingBills(incomingBills.filter(b => b.id !== id)); 
+  // 💡 إضافة: أمر الحذف السحابي الحقيقي للالتزامات والمصروفات المرتبطة
+  const handleDeleteBill = async (id: string) => { 
+    if (confirm("هل أنت متأكد من حذف الالتزام (الوارد) نهائياً من السحابة والمصروفات؟")) {
+      try {
+        setIsSubmitting(true);
+        await deleteIncomingBillFromSheet(id);
+        setIncomingBills(incomingBills.filter(b => b.id !== id)); 
+        alert("تم الحذف من السحابة بنجاح!");
+      } catch(e) { alert("حدث خطأ أثناء الحذف السحابي"); }
+      finally { setIsSubmitting(false); }
     }
   };
 
@@ -863,7 +902,20 @@ export default function SalesContractsPage() {
             </div>
           </div>
           <div style={{ marginTop: '15px', textAlign: 'left' }}>
-            <button onClick={() => { setIsEditingProfile(false); alert("تم حفظ إعدادات المنشأة والبنوك بنجاح! ✅"); }} style={primaryBtn}>حفظ الإعدادات 💾</button>
+            {/* 💡 إضافة: زر لحفظ إعدادات الشركة سحابياً */}
+            <button onClick={async () => { 
+              setIsSubmitting(true);
+              try {
+                await saveCompanyProfileToSheet(companyInfo);
+                localStorage.setItem('noorcast_company_profile', JSON.stringify(companyInfo));
+                setIsEditingProfile(false); 
+                alert("تم حفظ وتحديث بيانات الشركة سحابياً لجميع الأجهزة! ✅☁️");
+              } catch(e) {
+                alert("حدث خطأ في الحفظ السحابي");
+              } finally {
+                setIsSubmitting(false);
+              }
+            }} style={primaryBtn} disabled={isSubmitting}>{isSubmitting ? 'جاري الحفظ...' : 'حفظ الإعدادات سحابياً 💾'}</button>
           </div>
         </div>
       )}
@@ -896,7 +948,7 @@ export default function SalesContractsPage() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <img src={noorcastLogoUrl} alt="Logo" style={{ height: '30px', objectFit: 'contain' }} />
-                <h3 style={{ margin: 0, color: '#1e293b', fontWeight: 'bold' }}>{editingQuoteId ? '✏️️ تعديل عرض السعر' : '📄 عرض سعر تفصيلي جديد'}</h3>
+                <h3 style={{ margin: 0, color: '#1e293b', fontWeight: 'bold' }}>{editingQuoteId ? '✏ تعديل عرض السعر' : '📄 عرض سعر تفصيلي جديد'}</h3>
               </div>
               <button onClick={() => setIsQuoteModalOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}><FiX size={20} /></button>
             </div>
@@ -1307,6 +1359,7 @@ export default function SalesContractsPage() {
                             disabled={isSubmitting}
                             style={{ padding: '6px 10px', borderRadius: '6px', background: b.status === 'مسددة' ? '#065f46' : '#b45309', color: 'white', border: 'none', fontWeight: 'bold', fontSize: '0.8rem', cursor: 'pointer', outline: 'none' }}
                           >
+                            <option value="مسودة">مسودة</option>
                             <option value="مسددة">مسددة</option>
                             <option value="قيد الانتظار">قيد الانتظار</option>
                           </select>
@@ -1356,6 +1409,7 @@ export default function SalesContractsPage() {
                         disabled={isSubmitting}
                         style={{ padding: '6px 10px', borderRadius: '6px', background: b.status === 'مسددة' ? '#065f46' : '#b45309', color: 'white', border: 'none', fontWeight: 'bold', fontSize: '0.8rem', outline: 'none' }}
                       >
+                        <option value="مسودة">مسودة</option>
                         <option value="مسددة">مسددة</option>
                         <option value="قيد الانتظار">قيد الانتظار</option>
                       </select>

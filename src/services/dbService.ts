@@ -447,7 +447,6 @@ export const saveInvestorToSheet = async (investorData: any) => {
   }
 };
 
-// 💡 التحديث هنا: تأمين إرسال مصفوفة الخدمات (items) كـ JSON 
 export const saveInvoiceToSheet = async (invoiceData: any) => {
   try {
     const payload = {
@@ -568,7 +567,6 @@ export const deleteMarketingSocialFromSheet = async (id: string) => {
   }
 };
 
-// 💡 التحديث هنا: تأمين إرسال مصفوفة الخدمات لعروض الأسعار
 export const saveQuoteToSheet = async (quoteData: any) => {
   try {
     const payload = {
@@ -703,4 +701,75 @@ export const deleteTaskFromSheet = async (taskId: string) => {
   } catch (error) {
     throw error;
   }
+};
+
+// ==========================================
+// 💡 الدوال الجديدة المضافة أدناه (الحذف + إعدادات الشركة)
+// ==========================================
+
+// 1. جلب بيانات الشركة من السحابة
+export const getCompanyProfileSheet = async (forceRefresh = false) => {
+  try {
+    const data = await safeFetchFromSheet('getCompanyProfile', 'CompanyProfile', forceRefresh);
+    if (Array.isArray(data) && data.length > 0) {
+      return data[0]; 
+    }
+    return null;
+  } catch (error) {
+    console.error("خطأ في جلب بيانات الشركة:", error);
+    return null;
+  }
+};
+
+// 2. حفظ بيانات الشركة إلى السحابة
+export const saveCompanyProfileToSheet = async (profileData: any) => {
+  try {
+    await fetch(GOOGLE_SCRIPT_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'saveCompanyProfile', ...profileData })
+    });
+    return "Success";
+  } catch (error) {
+    throw error;
+  }
+};
+
+// 3. حذف عرض سعر
+export const deleteQuoteFromSheet = async (id: string) => {
+  try {
+    await fetch(GOOGLE_SCRIPT_URL, {
+      method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'deleteQuote', id })
+    });
+    return "Success";
+  } catch (error) { throw error; }
+};
+
+// 4. حذف فاتورة صادرة
+export const deleteInvoiceFromSheet = async (id: string) => {
+  try {
+    await fetch(GOOGLE_SCRIPT_URL, {
+      method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'deleteInvoice', id })
+    });
+    return "Success";
+  } catch (error) { throw error; }
+};
+
+// 5. حذف فاتورة التزام (وارد) والمصروف المرتبط بها
+export const deleteIncomingBillFromSheet = async (id: string) => {
+  try {
+    await fetch(GOOGLE_SCRIPT_URL, {
+      method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'deleteIncomingBill', id })
+    });
+    // حذف قيد المصروف المرتبط إن وجد
+    await fetch(GOOGLE_SCRIPT_URL, {
+      method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'deleteExpense', id: `EXP-BILL-${id}` })
+    });
+    return "Success";
+  } catch (error) { throw error; }
 };
