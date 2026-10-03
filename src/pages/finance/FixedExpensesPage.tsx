@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getIncomingBillsSheet, saveIncomingBillToSheet } from '@/services/dbService';
+import { getIncomingBillsSheet, saveIncomingBillToSheet, deleteIncomingBillFromSheet } from '@/services/dbService'; // 💡 إضافة دالة الحذف
 import { FiPlus, FiSave, FiTrash2, FiRefreshCw, FiDownload, FiSearch, FiEdit3 } from 'react-icons/fi';
 
 export default function FixedExpensesPage() {
@@ -25,7 +25,7 @@ export default function FixedExpensesPage() {
   });
 
   useEffect(() => {
-    loadFixedExpensesFromCloud();
+    loadFixedExpensesFromCloud(false);
   }, []);
 
   const cleanPrice = (val: any) => {
@@ -56,10 +56,10 @@ export default function FixedExpensesPage() {
   };
 
   // سحب المصروفات الثابتة والالتزامات سحابياً من قوقل شيت
-  const loadFixedExpensesFromCloud = async () => {
+  const loadFixedExpensesFromCloud = async (isManualRefresh = false) => {
     try {
       setLoading(true);
-      const sheetData = await getIncomingBillsSheet();
+      const sheetData = await getIncomingBillsSheet(isManualRefresh); // 💡 استخدام forceRefresh
       if (Array.isArray(sheetData)) {
         const mapped = sheetData.map((item: any, index: number) => ({
           id: String(item.id || 'fix-' + index),
@@ -73,8 +73,14 @@ export default function FixedExpensesPage() {
         }));
         setFixedExpenses(mapped);
       }
+      if (isManualRefresh) {
+        alert("✅ تم تحديث بيانات المصروفات الثابتة من السحابة بنجاح!");
+      }
     } catch (error) {
       console.error("خطأ في جلب المصروفات الثابتة سحابياً:", error);
+      if (isManualRefresh) {
+        alert("❌ حدث خطأ أثناء الاتصال بالسحابة.");
+      }
     } finally {
       setLoading(false);
     }
@@ -88,7 +94,7 @@ export default function FixedExpensesPage() {
 
     const numericAmount = cleanPrice(formData.amount);
     const itemData = {
-      id: editingId || ('FIX-' + Date.now()),
+      id: editingId || ('BILL-' + Date.now()), // 💡 عدلناها لـ BILL لتتوافق مع نظام الحذف
       supplier: formData.description,
       description: formData.description,
       category: formData.category,
@@ -108,12 +114,12 @@ export default function FixedExpensesPage() {
       if (editingId) {
         setFixedExpenses(fixedExpenses.map((item: any) => item.id === editingId ? { ...item, ...formData, amount: numericAmount } : item));
       } else {
-        setFixedExpenses([...fixedExpenses, { ...itemData, date: itemData.dueDate }]);
+        setFixedExpenses([{ ...itemData, date: itemData.dueDate }, ...fixedExpenses]);
       }
 
       resetForm();
       alert("تم حفظ المصروف الثابت وتحديث حالة السداد وترحيله سحابياً بنجاح! ☁️✅");
-      await loadFixedExpensesFromCloud();
+      await loadFixedExpensesFromCloud(false);
     } catch (error) {
       console.error("فشل الحفظ السحابي للمصروف الثابت:", error);
       alert("حدث خطأ أثناء الحفظ السحابي.");
@@ -152,9 +158,19 @@ export default function FixedExpensesPage() {
     setIsModalOpen(true);
   };
 
-  const deleteItem = (id: string) => {
-    if (confirm("هل أنت متأكد من حذف هذا المصروف الثابت من السحاب؟")) {
-      setFixedExpenses(fixedExpenses.filter((item: any) => item.id !== id));
+  // 💡 إضافة الحذف السحابي الفعلي
+  const deleteItem = async (id: string) => {
+    if (confirm("هل أنت متأكد من حذف هذا المصروف الثابت نهائياً من السحابة؟")) {
+      try {
+        setLoading(true);
+        await deleteIncomingBillFromSheet(id);
+        setFixedExpenses(fixedExpenses.filter((item: any) => item.id !== id));
+        alert("تم الحذف من السحابة بنجاح! ✅");
+      } catch (error) {
+        alert("حدث خطأ أثناء الحذف السحابي.");
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
@@ -216,6 +232,8 @@ export default function FixedExpensesPage() {
           .desktop-table-view { display: block !important; }
           .mobile-cards-view { display: none !important; }
         }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+        .spinning-icon { animation: spin 1s linear infinite; }
       `}</style>
 
       {/* رأس الصفحة */}
@@ -229,8 +247,8 @@ export default function FixedExpensesPage() {
           <button onClick={exportToExcel} style={{ background: '#059669', color: 'white', padding: '10px 16px', borderRadius: '10px', border: 'none', cursor: 'pointer', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem' }}>
             <FiDownload /> تصدير Excel 📊
           </button>
-          <button onClick={loadFixedExpensesFromCloud} style={secondaryBtn}>
-            <FiRefreshCw /> مزامنة سحابية 🔄
+          <button onClick={() => loadFixedExpensesFromCloud(true)} style={secondaryBtn} disabled={loading}>
+            <FiRefreshCw className={loading ? "spinning-icon" : ""} /> {loading ? 'جاري المزامنة...' : 'مزامنة سحابية 🔄'}
           </button>
           <button onClick={() => setIsModalOpen(true)} style={primaryBtn}>
             <FiPlus /> إضافة مصروف ثابت
@@ -284,7 +302,7 @@ export default function FixedExpensesPage() {
         </div>
       </div>
 
-      {loading ? (
+      {loading && fixedExpenses.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '60px', color: '#38bdf8', fontSize: '1rem', fontWeight: 'bold' }}>جاري المزامنة السحابية للمصروفات الثابتة... 🔄</div>
       ) : (
         <>
@@ -322,9 +340,9 @@ export default function FixedExpensesPage() {
                       <td style={{ ...tdStyle, color: '#94a3b8' }}>{item.responsible || '-'}</td>
                       <td style={{ ...tdStyle, color: '#f59e0b', fontWeight: 'bold' }}>{formatDateClean(item.date)}</td>
                       <td style={tdStyle}>
-                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                          <button onClick={() => startEdit(item)} style={actionBtn} title="تعديل"><FiEdit3 /> تعديل</button>
-                          <button onClick={() => deleteItem(item.id)} style={iconDeleteBtn} title="حذف"><FiTrash2 /></button>
+                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', justifyContent: 'flex-end' }}>
+                          <button onClick={() => startEdit(item)} style={actionBtn} title="تعديل" disabled={loading}><FiEdit3 /> تعديل</button>
+                          <button onClick={() => deleteItem(item.id)} style={iconDeleteBtn} title="حذف" disabled={loading}><FiTrash2 /></button>
                         </div>
                       </td>
                     </tr>
@@ -369,10 +387,10 @@ export default function FixedExpensesPage() {
 
                   {/* أزرار الإجراءات */}
                   <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
-                    <button onClick={() => startEdit(item)} style={{ ...actionBtn, flex: 1, padding: '10px', justifyContent: 'center', fontSize: '0.85rem' }}>
+                    <button onClick={() => startEdit(item)} style={{ ...actionBtn, flex: 1, padding: '10px', justifyContent: 'center', fontSize: '0.85rem' }} disabled={loading}>
                       <FiEdit3 /> تعديل
                     </button>
-                    <button onClick={() => deleteItem(item.id)} style={{ ...iconDeleteBtn, flex: 1, padding: '10px', justifyContent: 'center', fontSize: '0.85rem' }}>
+                    <button onClick={() => deleteItem(item.id)} style={{ ...iconDeleteBtn, flex: 1, padding: '10px', justifyContent: 'center', fontSize: '0.85rem' }} disabled={loading}>
                       <FiTrash2 /> حذف
                     </button>
                   </div>
@@ -432,8 +450,10 @@ export default function FixedExpensesPage() {
             <input type="date" style={inputStyle} value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} />
 
             <div style={{ display: 'flex', gap: '10px', marginTop: '15px', justifyContent: 'flex-end' }}>
-              <button onClick={handleSave} style={primaryBtn}><FiSave /> حفظ سحابياً</button>
-              <button onClick={resetForm} style={cancelBtn}>إلغاء</button>
+              <button onClick={handleSave} style={primaryBtn} disabled={loading}>
+                <FiSave /> {loading ? 'جاري الحفظ...' : 'حفظ سحابياً'}
+              </button>
+              <button onClick={resetForm} style={cancelBtn} disabled={loading}>إلغاء</button>
             </div>
           </div>
         </div>
@@ -447,7 +467,7 @@ const tdStyle = { padding: '14px 16px', textAlign: 'right' as const, fontSize: '
 const labelStyle = { display: 'block', fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '6px', color: '#1e293b' };
 const inputStyle = { width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', marginBottom: '14px', boxSizing: 'border-box' as const, color: '#1e293b', fontSize: '0.9rem', outline: 'none' };
 const primaryBtn = { background: '#2563eb', color: 'white', padding: '10px 18px', borderRadius: '10px', border: 'none', cursor: 'pointer', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem' };
-const secondaryBtn = { background: '#334155', color: '#38bdf8', border: '1px solid #475569', padding: '10px 16px', borderRadius: '10px', cursor: 'pointer', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem' };
+const secondaryBtn = { background: '#334155', color: '#38bdf8', border: '1px solid #475569', padding: '10px 16px', borderRadius: '10px', cursor: 'pointer', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem', transition: 'all 0.3s' };
 const cancelBtn = { background: '#64748b', color: 'white', padding: '10px 18px', borderRadius: '10px', border: 'none', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.9rem' };
 const actionBtn = { background: '#334155', color: '#38bdf8', border: '1px solid #475569', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem' };
 const iconDeleteBtn = { background: '#ef4444', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem' };
